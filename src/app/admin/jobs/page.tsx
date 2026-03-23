@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import type { Job, JobItem, PriceListItem } from "@/lib/types";
+import { queueMutation, replayQueue } from "@/lib/offline-queue";
 
 const JOB_STATUSES = ["Lead", "Called", "Scheduled", "In Progress", "Completed", "Invoiced", "Paid"] as const;
 const SERVICE_TYPES = ["HVAC", "Appliance Repair", "Commercial Kitchen", "Handyman", "Other"];
@@ -58,6 +59,11 @@ export default function JobsPage() {
   const [emailSending, setEmailSending] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
   const [reviewModal, setReviewModal] = useState<Job | null>(null);
+  const [onMyWayModal, setOnMyWayModal] = useState<Job | null>(null);
+  const [enRouteIds, setEnRouteIds] = useState<Set<string>>(new Set());
+  const [isOffline, setIsOffline] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
+  const pullStartY = useRef(0);
 
   useEffect(() => {
     Promise.all([
@@ -68,6 +74,36 @@ export default function JobsPage() {
       setPriceList(p);
     }).finally(() => setLoading(false));
   }, []);
+
+  const refreshJobs = useCallback(async () => {
+    setIsPulling(true);
+    try {
+      const j = await fetch("/api/admin/jobs").then((r) => r.json());
+      setJobs(j);
+    } finally {
+      setIsPulling(false);
+    }
+  }, []);
+
+  // Offline detection + replay queue on reconnect
+  useEffect(() => {
+    setIsOffline(!navigator.onLine);
+    const handleOnline = () => { setIsOffline(false); replayQueue(); };
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Open new job modal if ?new=1 in URL (from bottom nav ➕)
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("new") === "1" && !loading) {
+      setEditing({ ...emptyJob });
+    }
+  }, [loading]);
 
   const showToast = (msg: string, type: "success" | "error" | "info" = "success") => {
     setToast({ msg, type });
@@ -115,6 +151,16 @@ export default function JobsPage() {
   }
 
   async function updateStatus(id: string, status: string) {
+    // Haptic feedback
+    if (navigator.vibrate) navigator.vibrate(50);
+
+    if (!navigator.onLine) {
+      await queueMutation(`/api/admin/jobs/${id}/status`, "PATCH", { status });
+      setJobs(jobs.map((j) => (j.id === id ? { ...j, status: status as Job["status"] } : j)));
+      showToast("Saved offline — will sync when connected.", "info");
+      return;
+    }
+
     const res = await fetch(`/api/admin/jobs/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -130,6 +176,12 @@ export default function JobsPage() {
         setReviewModal({ ...updated });
       }
     }
+  }
+
+  async function handleOnMyWay(job: Job) {
+    await updateStatus(job.id, "In Progress");
+    setEnRouteIds((prev) => new Set([...prev, job.id]));
+    setOnMyWayModal(job);
   }
 
   async function markReviewSent(jobId: string) {
@@ -151,6 +203,14 @@ export default function JobsPage() {
 
   async function addItem(jobId: string) {
     if (!newItem.description) return;
+    if (!navigator.onLine) {
+      await queueMutation(`/api/admin/jobs/${jobId}/items`, "POST", newItem as object);
+      const tempItem: JobItem = { ...newItem as JobItem, id: `temp-${Date.now()}` };
+      setJobItems((prev) => ({ ...prev, [jobId]: [...(prev[jobId] || []), tempItem] }));
+      setNewItem({ itemType: "Labor", quantity: 1, unitPrice: 0, description: "" });
+      showToast("Saved offline — will sync when connected.", "info");
+      return;
+    }
     const res = await fetch(`/api/admin/jobs/${jobId}/items`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -224,6 +284,13 @@ export default function JobsPage() {
 
   return (
     <div>
+      {/* Offline Banner */}
+      {isOffline && (
+        <div className="bg-orange-100 border border-orange-300 text-orange-800 px-4 py-2 rounded-lg mb-4 text-sm flex items-center gap-2">
+          <span>📡</span> You&apos;re offline. Changes will sync when connected.
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium max-w-xs transition-all ${
@@ -296,7 +363,15 @@ export default function JobsPage() {
       </div>
 
       {/* Jobs table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div
+        className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
+        onTouchStart={(e) => { pullStartY.current = e.touches[0].clientY; }}
+        onTouchEnd={(e) => {
+          const delta = e.changedTouches[0].clientY - pullStartY.current;
+          if (delta > 60) refreshJobs();
+        }}
+      >
+        {isPulling && <div className="text-center text-xs text-gray-400 py-2 animate-pulse">🔄 Refreshing...</div>}
         {filtered.length === 0 ? (
           <div className="px-4 py-12 text-center text-gray-400">No jobs found</div>
         ) : (
@@ -307,15 +382,28 @@ export default function JobsPage() {
               const total = itemTotal(items);
               const reviewAlreadySent = job.googleReviewSent || reviewSentIds.has(job.id);
 
+              const swipeStart = { x: 0 };
               return (
-                <div key={job.id} className="hover:bg-gray-50">
+                <div
+                  key={job.id}
+                  className="hover:bg-gray-50 relative overflow-hidden"
+                  onTouchStart={(e) => { swipeStart.x = e.touches[0].clientX; }}
+                  onTouchEnd={(e) => {
+                    const dx = e.changedTouches[0].clientX - swipeStart.x;
+                    if (dx < -60 && job.status !== "In Progress") updateStatus(job.id, "In Progress");
+                    if (dx > 60 && job.status !== "Completed") updateStatus(job.id, "Completed");
+                  }}
+                >
                   {/* Job row */}
                   <div className="flex items-center gap-2 px-4 py-3 cursor-pointer" onClick={() => toggleExpand(job.id)}>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-navy text-sm">{job.customerName}</span>
                         {job.jobNumber && <span className="text-xs text-gray-400">#{job.jobNumber}</span>}
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[job.status] || "bg-gray-100 text-gray-700"}`}>{job.status}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[job.status] || "bg-gray-100 text-gray-700"} ${job.status === "In Progress" ? "animate-pulse" : ""}`}>
+                          {job.status === "In Progress" && <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full mr-1" />}
+                          {job.status}
+                        </span>
                         {(job.status === "Completed" || job.status === "Paid") && !reviewAlreadySent && (
                           <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">⭐ Review pending</span>
                         )}
@@ -352,6 +440,15 @@ export default function JobsPage() {
 
                       {/* Quick status buttons */}
                       <div className="flex flex-wrap gap-2 mb-4">
+                        {/* "I'm On My Way" — Phase 6D */}
+                        {job.status === "Scheduled" && (
+                          <button
+                            onClick={() => handleOnMyWay(job)}
+                            className="w-full px-4 py-3 bg-amber-500 text-white rounded-xl text-sm font-bold hover:bg-amber-600 flex items-center justify-center gap-2 shadow-md"
+                          >
+                            {enRouteIds.has(job.id) ? "✅ En Route" : "🚗 I'm On My Way"}
+                          </button>
+                        )}
                         {job.status !== "In Progress" && (
                           <button onClick={() => updateStatus(job.id, "In Progress")} className="px-3 py-1.5 bg-yellow-500 text-white rounded-lg text-xs font-medium hover:bg-yellow-600">
                             ▶ Mark In Progress
@@ -520,6 +617,49 @@ export default function JobsPage() {
           </div>
         )}
       </div>
+
+      {/* "I'm On My Way" Modal */}
+      {onMyWayModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="text-3xl mb-3 text-center">🚗</div>
+            <h2 className="text-xl font-bold text-navy text-center mb-2">En Route!</h2>
+            <p className="text-gray-600 text-center mb-4">
+              Job updated to <strong>In Progress</strong>. Want to notify <strong>{onMyWayModal.customerName}</strong>?
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-gray-700">
+                Hi {onMyWayModal.customerName.split(" ")[0]}! This is Joe from Grease &amp; Threads. I&apos;m on my way to {onMyWayModal.address || "your location"} for your {onMyWayModal.serviceType} service. See you soon! — 812-564-3719
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  const msg = `Hi ${onMyWayModal.customerName.split(" ")[0]}! This is Joe from Grease & Threads. I'm on my way to ${onMyWayModal.address || "your location"} for your ${onMyWayModal.serviceType} service. See you soon! — 812-564-3719`;
+                  navigator.clipboard.writeText(msg).then(() => showToast("Message copied!"));
+                }}
+                className="w-full py-3 bg-amber-500 text-white rounded-xl font-medium hover:bg-amber-600"
+              >
+                📋 Copy Message
+              </button>
+              {(onMyWayModal.customerPhone) && (
+                <a
+                  href={`sms:${onMyWayModal.customerPhone}`}
+                  className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 text-center block"
+                >
+                  💬 Open Messages
+                </a>
+              )}
+              <button
+                onClick={() => setOnMyWayModal(null)}
+                className="w-full py-2 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New/Edit Job Modal */}
       {editing && (
