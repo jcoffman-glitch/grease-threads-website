@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "date": "2026-03-23",
+    "customerName": "TEST New Site",
+    "phone": "8128413814",
+    "serviceType": "HVAC",
+    "status": "Called",
+    "amount": 75,
+    "notes": "cleaning",
+    "id": "e906fbcf-ce9a-48f3-b53f-97eed0e4cf19"
+  }
+]
