@@ -14,12 +14,18 @@ export const authOptions: AuthOptions = {
         if (!credentials?.username || !credentials?.password) return null;
         if (credentials.username !== process.env.ADMIN_USERNAME) return null;
 
-        const storedHash = process.env.ADMIN_PASSWORD;
-        if (!storedHash) return null;
+        const stored = process.env.ADMIN_PASSWORD;
+        if (!stored) return null;
 
-        const valid = await bcrypt.compare(credentials.password, storedHash);
+        // Support both bcrypt hash and plaintext (plaintext for initial setup)
+        let valid = false;
+        if (stored.startsWith("$2")) {
+          valid = await bcrypt.compare(credentials.password, stored);
+        } else {
+          valid = credentials.password === stored;
+        }
+
         if (!valid) return null;
-
         return { id: "1", name: "Admin" };
       },
     }),
