@@ -13,6 +13,7 @@ const navItems = [
   { href: "/admin/inventory", label: "Inventory", icon: "📦" },
   { href: "/admin/price-list", label: "Price List", icon: "🏷️" },
   { href: "/admin/service-log", label: "Service Log", icon: "📋" },
+  { href: "/admin/marketing", label: "Marketing", icon: "📣" },
 ];
 
 function AdminShell({ children }: { children: React.ReactNode }) {

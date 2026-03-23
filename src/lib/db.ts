@@ -104,6 +104,7 @@ function rowToJob(r: any): Job {
     trackingToken: r.tracking_token,
     googleReviewSent: !!r.google_review_sent,
     sheetsSynced: !!r.sheets_synced,
+    leadSource: r.lead_source || "direct",
     date: r.created_at?.split("T")[0],
     phone: r.customer_phone,
     amount: 0,
@@ -213,8 +214,8 @@ export async function dbCreateJob(data: Partial<Job>): Promise<Job> {
   const createdAt = new Date().toISOString();
   const trackingToken = generateTrackingToken();
   await client.execute({
-    sql: `INSERT INTO jobs (id, job_number, created_at, customer_name, customer_phone, customer_email, service_type, problem_description, address, scheduled_at, status, notes, tracking_token, google_review_sent, sheets_synced)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+    sql: `INSERT INTO jobs (id, job_number, created_at, customer_name, customer_phone, customer_email, service_type, problem_description, address, scheduled_at, status, notes, tracking_token, google_review_sent, sheets_synced, lead_source)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)`,
     args: [
       id, jobNumber, createdAt,
       data.customerName || "",
@@ -227,6 +228,7 @@ export async function dbCreateJob(data: Partial<Job>): Promise<Job> {
       data.status || "Lead",
       data.notes || null,
       trackingToken,
+      data.leadSource || "direct",
     ],
   });
   const row = await client.execute({ sql: "SELECT * FROM jobs WHERE id = ?", args: [id] });
@@ -239,7 +241,7 @@ export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job |
   if (!existing.rows.length) return null;
   const cur = rowToJob(existing.rows[0]);
   await client.execute({
-    sql: `UPDATE jobs SET customer_name=?, customer_phone=?, customer_email=?, service_type=?, problem_description=?, address=?, scheduled_at=?, status=?, notes=?, google_review_sent=?, sheets_synced=? WHERE id=?`,
+    sql: `UPDATE jobs SET customer_name=?, customer_phone=?, customer_email=?, service_type=?, problem_description=?, address=?, scheduled_at=?, status=?, notes=?, google_review_sent=?, sheets_synced=?, lead_source=? WHERE id=?`,
     args: [
       data.customerName ?? cur.customerName,
       data.customerPhone ?? cur.customerPhone,
@@ -252,6 +254,7 @@ export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job |
       data.notes ?? cur.notes ?? null,
       data.googleReviewSent !== undefined ? (data.googleReviewSent ? 1 : 0) : (cur.googleReviewSent ? 1 : 0),
       data.sheetsSynced !== undefined ? (data.sheetsSynced ? 1 : 0) : (cur.sheetsSynced ? 1 : 0),
+      data.leadSource ?? cur.leadSource ?? "direct",
       id,
     ],
   });

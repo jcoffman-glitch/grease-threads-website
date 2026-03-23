@@ -120,6 +120,9 @@ export default function AdminDashboard() {
     const d = j.scheduledAt || j.createdAt || j.date;
     return d ? new Date(d).toDateString() === today : false;
   });
+  const pendingReviews = jobs.filter(j =>
+    (j.status === "Completed" || j.status === "Paid") && !j.googleReviewSent
+  );
   const lowStock = inventory.filter(i => i.qtyOnHand <= i.reorderPoint);
 
   const todaySchedule = todaysJobs.sort((a, b) =>
@@ -180,6 +183,9 @@ export default function AdminDashboard() {
           <span className="text-2xl mb-1">✅</span>
           <span className="text-3xl font-black text-green-600">{completedToday.length}</span>
           <span className="text-xs font-semibold text-green-600 mt-1">Done Today</span>
+          {pendingReviews.length > 0 && (
+            <span className="text-xs text-yellow-600 font-medium mt-0.5">⭐ {pendingReviews.length} review{pendingReviews.length > 1 ? "s" : ""} pending</span>
+          )}
         </Link>
         <Link href="/admin/inventory?filter=low"
           className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4 flex flex-col items-center text-center active:scale-95 transition-transform">

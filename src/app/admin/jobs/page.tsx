@@ -7,6 +7,16 @@ const JOB_STATUSES = ["Lead", "Called", "Scheduled", "In Progress", "Completed",
 const SERVICE_TYPES = ["HVAC", "Appliance Repair", "Commercial Kitchen", "Handyman", "Other"];
 const GOOGLE_REVIEW_URL = "https://search.google.com/local/writereview?placeid=ChIJaxfsFK2hhkYRlSUOXJr5gfk";
 
+const LEAD_SOURCES = [
+  { value: "direct", label: "Direct Call" },
+  { value: "facebook", label: "Facebook" },
+  { value: "google_search", label: "Google Search" },
+  { value: "google_maps", label: "Google Maps" },
+  { value: "referral", label: "Referral" },
+  { value: "website", label: "Website Contact Form" },
+  { value: "other", label: "Other" },
+];
+
 const STATUS_COLORS: Record<string, string> = {
   Lead: "bg-gray-100 text-gray-700",
   Called: "bg-blue-100 text-blue-700",
@@ -29,6 +39,7 @@ const emptyJob = {
   scheduledAt: "",
   status: "Lead" as const,
   notes: "",
+  leadSource: "direct",
 };
 
 export default function JobsPage() {
@@ -41,8 +52,12 @@ export default function JobsPage() {
   const [newItem, setNewItem] = useState<Partial<JobItem>>({ itemType: "Labor", quantity: 1, unitPrice: 0, description: "" });
   const [loading, setLoading] = useState(true);
   const [reviewCopied, setReviewCopied] = useState<string | null>(null);
+  const [reviewSentIds, setReviewSentIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<"date" | "status">("date");
   const [generatingInvoice, setGeneratingInvoice] = useState<string | null>(null);
+  const [emailSending, setEmailSending] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const [reviewModal, setReviewModal] = useState<Job | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -53,6 +68,11 @@ export default function JobsPage() {
       setPriceList(p);
     }).finally(() => setLoading(false));
   }, []);
+
+  const showToast = (msg: string, type: "success" | "error" | "info" = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const loadItems = useCallback(async (jobId: string) => {
     if (jobItems[jobId]) return;
@@ -102,6 +122,25 @@ export default function JobsPage() {
     });
     const updated = await res.json();
     setJobs(jobs.map((j) => (j.id === id ? updated : j)));
+
+    // Phase 4D: if just marked Paid and review not sent, show review modal
+    if (status === "Paid") {
+      const job = jobs.find((j) => j.id === id);
+      if (job && !job.googleReviewSent && !reviewSentIds.has(id)) {
+        setReviewModal({ ...updated });
+      }
+    }
+  }
+
+  async function markReviewSent(jobId: string) {
+    const res = await fetch(`/api/admin/jobs/${jobId}/review-sent`, { method: "PATCH" });
+    if (res.ok) {
+      const updated = await res.json();
+      setJobs(jobs.map((j) => (j.id === jobId ? updated : j)));
+      setReviewSentIds((prev) => new Set([...prev, jobId]));
+      showToast("✅ Review request marked as sent!");
+      setReviewModal(null);
+    }
   }
 
   async function remove(id: string) {
@@ -137,20 +176,42 @@ export default function JobsPage() {
       const res = await fetch(`/api/admin/invoices/${jobId}/generate`, { method: "POST" });
       const invoice = await res.json();
       setJobs(jobs.map((j) => (j.id === jobId ? { ...j, status: "Invoiced" } : j)));
-      alert(`Invoice ${invoice.invoiceNumber} created! Go to Invoices page to view.`);
+      showToast(`Invoice ${invoice.invoiceNumber} created! Go to Invoices page to view.`, "info");
     } catch {
-      alert("Error generating invoice");
+      showToast("Error generating invoice", "error");
     } finally {
       setGeneratingInvoice(null);
     }
   }
 
   function copyReviewRequest(job: Job) {
-    const msg = `Hi ${job.customerName.split(" ")[0]}! Thanks for calling Grease & Threads. If you have a moment, a Google review really helps small businesses like mine: ${GOOGLE_REVIEW_URL} — Thanks! - Dave`;
+    const firstName = job.customerName.split(" ")[0];
+    const msg = `Hi ${firstName}! Thanks for calling Grease & Threads. If you have a moment, a Google review really helps small businesses like mine: ${GOOGLE_REVIEW_URL} — Thanks! - Rick`;
     navigator.clipboard.writeText(msg).then(() => {
       setReviewCopied(job.id);
       setTimeout(() => setReviewCopied(null), 3000);
     });
+  }
+
+  async function sendEmail(jobId: string, template: string) {
+    setEmailSending(`${jobId}-${template}`);
+    try {
+      const res = await fetch(`/api/admin/jobs/${jobId}/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✉️ Email sent successfully!`);
+      } else {
+        showToast(data.reason || "Failed to send email", "error");
+      }
+    } catch {
+      showToast("Error sending email", "error");
+    } finally {
+      setEmailSending(null);
+    }
   }
 
   function applyPriceListItem(item: PriceListItem) {
@@ -163,6 +224,53 @@ export default function JobsPage() {
 
   return (
     <div>
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium max-w-xs transition-all ${
+          toast.type === "error" ? "bg-red-600" : toast.type === "info" ? "bg-blue-600" : "bg-green-600"
+        }`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Phase 4D: Post-payment review modal */}
+      {reviewModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="text-3xl mb-3 text-center">⭐</div>
+            <h2 className="text-xl font-bold text-navy text-center mb-2">Job Complete & Paid!</h2>
+            <p className="text-gray-600 text-center mb-4">
+              Don&apos;t forget to request a Google Review from <strong>{reviewModal.customerName}</strong>.
+            </p>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+              <p className="text-xs text-green-700 italic">
+                &quot;Hi {reviewModal.customerName.split(" ")[0]}! Thanks for calling Grease &amp; Threads. If you have a moment, a Google review really helps small businesses like mine: {GOOGLE_REVIEW_URL} — Thanks! - Rick&quot;
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { copyReviewRequest(reviewModal); }}
+                className="flex-1 py-2.5 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700"
+              >
+                {reviewCopied === reviewModal.id ? "✓ Copied!" : "📋 Copy Message"}
+              </button>
+              <button
+                onClick={() => markReviewSent(reviewModal.id)}
+                className="flex-1 py-2.5 bg-navy text-white rounded-lg font-medium text-sm hover:bg-navy/90"
+              >
+                ✅ Mark Sent
+              </button>
+              <button
+                onClick={() => setReviewModal(null)}
+                className="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-navy">Job Tracker</h1>
@@ -197,6 +305,7 @@ export default function JobsPage() {
               const isExpanded = expandedId === job.id;
               const items = jobItems[job.id] || [];
               const total = itemTotal(items);
+              const reviewAlreadySent = job.googleReviewSent || reviewSentIds.has(job.id);
 
               return (
                 <div key={job.id} className="hover:bg-gray-50">
@@ -207,6 +316,9 @@ export default function JobsPage() {
                         <span className="font-semibold text-navy text-sm">{job.customerName}</span>
                         {job.jobNumber && <span className="text-xs text-gray-400">#{job.jobNumber}</span>}
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[job.status] || "bg-gray-100 text-gray-700"}`}>{job.status}</span>
+                        {(job.status === "Completed" || job.status === "Paid") && !reviewAlreadySent && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">⭐ Review pending</span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">{job.serviceType} · {job.customerPhone}</div>
                     </div>
@@ -233,6 +345,9 @@ export default function JobsPage() {
                             </a>
                           </div>
                         )}
+                        {job.leadSource && (
+                          <div><span className="text-gray-500">Lead Source:</span> <span className="text-gray-800">{LEAD_SOURCES.find(l => l.value === job.leadSource)?.label || job.leadSource}</span></div>
+                        )}
                       </div>
 
                       {/* Quick status buttons */}
@@ -247,6 +362,11 @@ export default function JobsPage() {
                             ✓ Mark Complete
                           </button>
                         )}
+                        {job.status !== "Paid" && (
+                          <button onClick={() => updateStatus(job.id, "Paid")} className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700">
+                            💰 Mark Paid
+                          </button>
+                        )}
                         <button onClick={() => generateInvoice(job.id)} disabled={generatingInvoice === job.id}
                           className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50">
                           {generatingInvoice === job.id ? "Generating..." : "🧾 Generate Invoice"}
@@ -259,17 +379,64 @@ export default function JobsPage() {
                         </button>
                       </div>
 
-                      {/* Google Review prompt (show when Completed or Paid) */}
-                      {(job.status === "Completed" || job.status === "Paid") && (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-                          <p className="text-xs font-medium text-green-800 mb-1">📬 Send Google Review Request</p>
-                          <p className="text-xs text-green-700 mb-2 italic">
-                            &quot;Hi {job.customerName.split(" ")[0]}! Thanks for calling Grease & Threads. If you have a moment, a Google review really helps small businesses like mine: {GOOGLE_REVIEW_URL} — Thanks! - Dave&quot;
-                          </p>
-                          <button onClick={() => copyReviewRequest(job)}
-                            className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">
-                            {reviewCopied === job.id ? "✓ Copied!" : "📋 Copy Review Request"}
+                      {/* Email buttons (Phase 4B) */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <p className="text-xs font-medium text-blue-800 mb-2">✉️ Email Customer</p>
+                        <div className="flex flex-wrap gap-2">
+                          {job.status === "Scheduled" && (
+                            <button
+                              onClick={() => sendEmail(job.id, "confirmation")}
+                              disabled={emailSending === `${job.id}-confirmation`}
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {emailSending === `${job.id}-confirmation` ? "Sending..." : "📅 Send Confirmation"}
+                            </button>
+                          )}
+                          {(job.status === "Invoiced" || job.status === "Paid") && (
+                            <button
+                              onClick={() => sendEmail(job.id, "invoice")}
+                              disabled={emailSending === `${job.id}-invoice`}
+                              className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50"
+                            >
+                              {emailSending === `${job.id}-invoice` ? "Sending..." : "🧾 Send Invoice"}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => sendEmail(job.id, "followup")}
+                            disabled={emailSending === `${job.id}-followup`}
+                            className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50"
+                          >
+                            {emailSending === `${job.id}-followup` ? "Sending..." : "🔄 Send Follow-up"}
                           </button>
+                        </div>
+                        {!job.customerEmail && (
+                          <p className="text-xs text-blue-500 mt-1.5">⚠️ No email on file — add one to enable email features</p>
+                        )}
+                      </div>
+
+                      {/* Google Review prompt (Phase 4A) */}
+                      {(job.status === "Completed" || job.status === "Paid") && (
+                        <div className={`border rounded-lg p-3 mb-4 ${reviewAlreadySent ? "bg-gray-50 border-gray-200" : "bg-green-50 border-green-200"}`}>
+                          <p className={`text-xs font-medium mb-1 ${reviewAlreadySent ? "text-gray-500" : "text-green-800"}`}>
+                            {reviewAlreadySent ? "✅ Review request sent" : "📬 Send Google Review Request"}
+                          </p>
+                          {!reviewAlreadySent && (
+                            <>
+                              <p className="text-xs text-green-700 mb-2 italic">
+                                &quot;Hi {job.customerName.split(" ")[0]}! Thanks for calling Grease &amp; Threads. If you have a moment, a Google review really helps small businesses like mine: {GOOGLE_REVIEW_URL} — Thanks! - Rick&quot;
+                              </p>
+                              <div className="flex gap-2">
+                                <button onClick={() => copyReviewRequest(job)}
+                                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">
+                                  {reviewCopied === job.id ? "✓ Copied!" : "📋 Copy Review Request"}
+                                </button>
+                                <button onClick={() => markReviewSent(job.id)}
+                                  className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-xs font-medium hover:bg-gray-700">
+                                  ✅ Mark Review Sent
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
 
@@ -371,6 +538,13 @@ export default function JobsPage() {
                 <select value={editing.serviceType || "HVAC"} onChange={(e) => setEditing({ ...editing, serviceType: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm">
                   {SERVICE_TYPES.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">How did they find us?</label>
+                <select value={editing.leadSource || "direct"} onChange={(e) => setEditing({ ...editing, leadSource: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm">
+                  {LEAD_SOURCES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                 </select>
               </div>
               <div>
