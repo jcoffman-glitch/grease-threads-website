@@ -102,6 +102,79 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* Meet the Team */}
+      <section className="py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-4">
+            Meet the <span className="text-amber">Team</span>
+          </h2>
+          <p className="text-gray-600 text-center mb-12 max-w-2xl mx-auto">
+            The people behind every repair, every call, and every system we build.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Joe Coffman */}
+            <div className="bg-white rounded-lg p-6 shadow-sm hover:shadow-lg transition-shadow">
+              <div className="w-20 h-20 bg-navy rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-amber">JC</span>
+              </div>
+              <h3 className="text-xl font-bold text-center mb-1">Joe Coffman</h3>
+              <p className="text-amber font-semibold text-sm text-center mb-4">
+                Owner &amp; Operations Manager
+              </p>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Joe spent 30 years as a paramedic and 15 years in municipal water
+                treatment before founding Grease &amp; Threads. He knows how
+                mechanical systems work because he has spent his career keeping
+                them running. Joe handles all scheduling, estimates, promotions,
+                and customer relations. Plain-speaking, honest, and he will never
+                sell you something you do not need.
+              </p>
+            </div>
+
+            {/* Anthoney */}
+            <div className="bg-white rounded-lg p-6 shadow-sm hover:shadow-lg transition-shadow">
+              <div className="w-20 h-20 bg-navy rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-amber">A</span>
+              </div>
+              <h3 className="text-xl font-bold text-center mb-1">Anthoney</h3>
+              <p className="text-amber font-semibold text-sm text-center mb-4">
+                Field Manager &amp; Lead Technician
+              </p>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                When something breaks, Anthoney is the guy who actually knows
+                why. With over a decade as a machinist and tool-and-die
+                specialist at Futaba and Raybestos, he spent years working with
+                precision equipment where getting it wrong was not an option.
+                That attention to detail carried straight into HVAC — he earned
+                his certification through Ivy Tech and spent two years
+                maintaining commercial rooftop units and refrigeration systems at
+                Wabash Valley Correctional Facility, where downtime is not just
+                an inconvenience — it is a crisis. At Grease &amp; Threads,
+                Anthoney leads every field job. If he cannot fix it, it probably
+                cannot be fixed.
+              </p>
+            </div>
+
+            {/* Coffman */}
+            <div className="bg-white rounded-lg p-6 shadow-sm hover:shadow-lg transition-shadow">
+              <div className="w-20 h-20 bg-navy rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-amber">C</span>
+              </div>
+              <h3 className="text-xl font-bold text-center mb-1">Coffman</h3>
+              <p className="text-amber font-semibold text-sm text-center mb-4">
+                Head of IT &amp; Systems
+              </p>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Coffman manages all digital infrastructure for Grease &amp;
+                Threads — the website, job tracking, backend systems, and data
+                pipelines. As the business grows into building automation and
+                control systems, he will be the one building them.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="bg-navy text-white py-16 text-center">
         <div className="max-w-4xl mx-auto px-4">
