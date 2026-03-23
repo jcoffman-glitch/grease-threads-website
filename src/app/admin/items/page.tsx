@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import type { PriceListItem } from "@/lib/types";
 
-const emptyItem: Omit<PriceListItem, "id"> = {
+const emptyItem: Partial<PriceListItem> = {
   name: "",
   description: "",
+  defaultPrice: 0,
   price: 0,
   category: "",
+  itemType: "Labor",
 };
 
 export default function ItemsPage() {
@@ -85,7 +87,7 @@ export default function ItemsPage() {
                         <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="px-4 py-3 font-medium text-navy">{item.name}</td>
                           <td className="px-4 py-3 hidden sm:table-cell text-gray-600">{item.description}</td>
-                          <td className="px-4 py-3">${item.price.toFixed(2)}</td>
+                          <td className="px-4 py-3">${(item.defaultPrice ?? item.price ?? 0).toFixed(2)}</td>
                           <td className="px-4 py-3">
                             <div className="flex gap-2">
                               <button onClick={() => setEditing({ ...item })} className="text-blue-600 hover:text-blue-800 text-xs">Edit</button>

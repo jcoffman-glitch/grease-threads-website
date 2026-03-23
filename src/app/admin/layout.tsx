@@ -9,10 +9,10 @@ import { useState } from "react";
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
   { href: "/admin/jobs", label: "Jobs", icon: "🔧" },
-  { href: "/admin/service-log", label: "Service Log", icon: "📋" },
   { href: "/admin/invoices", label: "Invoices", icon: "💰" },
   { href: "/admin/inventory", label: "Inventory", icon: "📦" },
-  { href: "/admin/items", label: "Price List", icon: "🏷️" },
+  { href: "/admin/price-list", label: "Price List", icon: "🏷️" },
+  { href: "/admin/service-log", label: "Service Log", icon: "📋" },
 ];
 
 function AdminShell({ children }: { children: React.ReactNode }) {

@@ -41,15 +41,23 @@ function getSheetsClient() {
 
 function rowToJob(row: string[], rowIndex: number): Job {
   // rowIndex is 0-based within the data array; actual sheet row = rowIndex + 2 (row 1 is header)
+  const id = String(rowIndex + 2);
   return {
-    id: String(rowIndex + 2), // sheet row number used as id
+    id,
+    jobNumber: `LEGACY-${id}`,
+    createdAt: row[0] || row[2] || new Date().toISOString(),
     date: row[2] || row[0] || "", // Date of Call (col C), fallback Timestamp (col A)
     customerName: row[3] || "",
+    customerPhone: row[4] || "",
     phone: row[4] || "",
     serviceType: row[5] || "",
+    problemDescription: row[6] || row[12] || "",
     status: (row[8] as Job["status"]) || "Called",
     amount: parseFloat(row[11]) || 0,
     notes: row[12] || "",
+    trackingToken: `SHEET-${id}`,
+    googleReviewSent: false,
+    sheetsSynced: true,
   };
 }
 
@@ -170,12 +178,20 @@ export async function deleteJob(id: string): Promise<void> {
 // ─── Invoices ─────────────────────────────────────────────────────────────────
 
 function rowToInvoice(row: string[], rowIndex: number): Invoice {
+  const id = String(rowIndex + 2);
+  const amount = parseFloat(row[3]) || 0;
   return {
-    id: String(rowIndex + 2),
+    id,
     date: row[0] || "",
+    createdAt: row[0] || new Date().toISOString(),
     customer: row[1] || "",
-    invoiceNumber: row[2] || "",
-    amount: parseFloat(row[3]) || 0,
+    customerName: row[1] || "",
+    customerPhone: "",
+    invoiceNumber: row[2] || `INV-LEGACY-${id}`,
+    amount,
+    subtotal: amount,
+    tax: 0,
+    total: amount,
     status: (row[4] as Invoice["status"]) || "Draft",
     items: [],
   };

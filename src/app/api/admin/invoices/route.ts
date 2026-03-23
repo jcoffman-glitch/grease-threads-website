@@ -1,7 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getInvoices, createInvoice, updateInvoice, deleteInvoice } from "@/lib/sheets";
-import type { Invoice } from "@/lib/types";
+import { dbGetInvoices, dbCreateInvoice, dbUpdateInvoice, dbDeleteInvoice } from "@/lib/db";
 
 async function auth() {
   const session = await getServerSession(authOptions);
@@ -12,30 +11,30 @@ async function auth() {
 export async function GET() {
   const denied = await auth();
   if (denied) return denied;
-  return Response.json(await getInvoices());
+  return Response.json(await dbGetInvoices());
 }
 
 export async function POST(request: Request) {
   const denied = await auth();
   if (denied) return denied;
   const body = await request.json();
-  const item = await createInvoice(body as Omit<Invoice, "id">);
-  return Response.json(item);
+  const invoice = await dbCreateInvoice(body);
+  return Response.json(invoice);
 }
 
 export async function PUT(request: Request) {
   const denied = await auth();
   if (denied) return denied;
   const body = await request.json();
-  const item = await updateInvoice(body.id, body);
-  if (!item) return Response.json({ error: "Not found" }, { status: 404 });
-  return Response.json(item);
+  const invoice = await dbUpdateInvoice(body.id, body);
+  if (!invoice) return Response.json({ error: "Not found" }, { status: 404 });
+  return Response.json(invoice);
 }
 
 export async function DELETE(request: Request) {
   const denied = await auth();
   if (denied) return denied;
   const { id } = await request.json();
-  await deleteInvoice(id);
+  await dbDeleteInvoice(id);
   return Response.json({ success: true });
 }

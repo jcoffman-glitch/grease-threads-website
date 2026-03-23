@@ -1,216 +1,140 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Invoice, InvoiceLineItem } from "@/lib/types";
+import type { Invoice } from "@/lib/types";
 
-const invoiceStatuses: Invoice["status"][] = ["Draft", "Sent", "Paid", "Overdue"];
+const STATUS_COLORS: Record<string, string> = {
+  Draft: "bg-gray-100 text-gray-700",
+  Sent: "bg-blue-100 text-blue-700",
+  Paid: "bg-green-100 text-green-700",
+  Overdue: "bg-red-100 text-red-700",
+};
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [editing, setEditing] = useState<Partial<Invoice> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/invoices").then((r) => r.json()).then(setInvoices).finally(() => setLoading(false));
   }, []);
 
-  const outstanding = invoices.filter((i) => i.status !== "Paid").reduce((sum, i) => sum + i.amount, 0);
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editing) return;
-    const totalAmount = (editing.items || []).reduce((sum, item) => sum + item.total, 0);
-    const toSave = { ...editing, amount: totalAmount };
-    const method = editing.id ? "PUT" : "POST";
-    const res = await fetch("/api/admin/invoices", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(toSave),
-    });
-    const updated = await res.json();
-    if (editing.id) {
-      setInvoices(invoices.map((i) => (i.id === updated.id ? updated : i)));
-    } else {
-      setInvoices([...invoices, updated]);
-    }
-    setEditing(null);
-  }
-
-  async function markPaid(invoice: Invoice) {
+  async function markPaid(id: string) {
     const res = await fetch("/api/admin/invoices", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...invoice, status: "Paid" }),
+      body: JSON.stringify({ id, status: "Paid", paidAt: new Date().toISOString() }),
     });
     const updated = await res.json();
-    setInvoices(invoices.map((i) => (i.id === updated.id ? updated : i)));
+    setInvoices(invoices.map((i) => (i.id === id ? updated : i)));
   }
 
-  async function remove(id: string) {
+  async function deleteInvoice(id: string) {
     if (!confirm("Delete this invoice?")) return;
-    await fetch("/api/admin/invoices", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    await fetch("/api/admin/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
     setInvoices(invoices.filter((i) => i.id !== id));
   }
 
-  function addLineItem() {
-    if (!editing) return;
-    const items = [...(editing.items || []), { description: "", qty: 1, unitPrice: 0, total: 0 }];
-    setEditing({ ...editing, items });
-  }
+  const outstanding = invoices
+    .filter((i) => i.status !== "Paid")
+    .reduce((sum, i) => sum + (i.total || i.amount || 0), 0);
 
-  function updateLineItem(index: number, field: keyof InvoiceLineItem, value: string | number) {
-    if (!editing) return;
-    const items = [...(editing.items || [])];
-    const item = { ...items[index], [field]: value };
-    if (field === "qty" || field === "unitPrice") {
-      item.total = Number(item.qty) * Number(item.unitPrice);
-    }
-    items[index] = item;
-    setEditing({ ...editing, items });
-  }
-
-  function removeLineItem(index: number) {
-    if (!editing) return;
-    const items = (editing.items || []).filter((_, i) => i !== index);
-    setEditing({ ...editing, items });
-  }
-
-  if (loading) return <div className="text-gray-500">Loading...</div>;
+  if (loading) return <div className="text-gray-500 p-4">Loading invoices...</div>;
 
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-navy">Invoices</h1>
-          <p className="text-sm text-gray-500">Outstanding: <span className="font-semibold text-amber-dark">${outstanding.toLocaleString()}</span></p>
+        <h1 className="text-2xl font-bold text-navy">Invoices</h1>
+        <div className="bg-amber/10 border border-amber/30 rounded-lg px-4 py-2 text-sm">
+          <span className="text-gray-600">Outstanding:</span>{" "}
+          <span className="font-bold text-amber">${outstanding.toFixed(2)}</span>
         </div>
-        <button
-          onClick={() => setEditing({ invoiceNumber: "", date: new Date().toISOString().split("T")[0], customer: "", amount: 0, status: "Draft", items: [] })}
-          className="px-4 py-2 bg-amber text-white rounded-lg hover:bg-amber-dark transition-colors text-sm font-medium"
-        >
-          + New Invoice
-        </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-left text-gray-500">
-              <th className="px-4 py-3">Invoice #</th>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Amount</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No invoices yet</td></tr>
-            ) : (
-              invoices.map((inv) => (
-                <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-navy">{inv.invoiceNumber}</td>
-                  <td className="px-4 py-3">{inv.date}</td>
-                  <td className="px-4 py-3">{inv.customer}</td>
-                  <td className="px-4 py-3">${inv.amount.toLocaleString()}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${invStatusColor(inv.status)}`}>
-                      {inv.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      {inv.status !== "Paid" && (
-                        <button onClick={() => markPaid(inv)} className="text-green-600 hover:text-green-800 text-xs">Paid</button>
-                      )}
-                      <button onClick={() => setEditing({ ...inv })} className="text-blue-600 hover:text-blue-800 text-xs">Edit</button>
-                      <button onClick={() => remove(inv.id)} className="text-red-600 hover:text-red-800 text-xs">Del</button>
+      {invoices.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-12 text-center text-gray-400">
+          No invoices yet. Generate one from a job in the Job Tracker.
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="divide-y divide-gray-50">
+            {invoices.sort((a, b) => new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime()).map((inv) => {
+              const isExpanded = expandedId === inv.id;
+              const total = inv.total || inv.amount || 0;
+              return (
+                <div key={inv.id} className="hover:bg-gray-50">
+                  <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : inv.id)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-navy text-sm">{inv.invoiceNumber}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[inv.status] || "bg-gray-100 text-gray-700"}`}>{inv.status}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">{inv.customerName} · {new Date(inv.createdAt || inv.date || "").toLocaleDateString()}</div>
                     </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {editing && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <form onSubmit={save} className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-navy mb-4">{editing.id ? "Edit Invoice" : "New Invoice"}</h2>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Invoice #" value={editing.invoiceNumber || ""} onChange={(v) => setEditing({ ...editing, invoiceNumber: v })} />
-                <Field label="Date" type="date" value={editing.date || ""} onChange={(v) => setEditing({ ...editing, date: v })} />
-              </div>
-              <Field label="Customer" value={editing.customer || ""} onChange={(v) => setEditing({ ...editing, customer: v })} />
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={editing.status || "Draft"}
-                  onChange={(e) => setEditing({ ...editing, status: e.target.value as Invoice["status"] })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-                >
-                  {invoiceStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700">Line Items</label>
-                  <button type="button" onClick={addLineItem} className="text-xs text-amber hover:text-amber-dark font-medium">+ Add Item</button>
-                </div>
-                {(editing.items || []).map((item, i) => (
-                  <div key={i} className="flex gap-2 mb-2 items-end">
-                    <div className="flex-1">
-                      <input placeholder="Description" value={item.description} onChange={(e) => updateLineItem(i, "description", e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900" />
+                    <div className="text-right">
+                      <div className="font-bold text-gray-800">${total.toFixed(2)}</div>
                     </div>
-                    <div className="w-16">
-                      <input type="number" placeholder="Qty" value={item.qty} onChange={(e) => updateLineItem(i, "qty", Number(e.target.value))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900" />
-                    </div>
-                    <div className="w-24">
-                      <input type="number" placeholder="Price" value={item.unitPrice} onChange={(e) => updateLineItem(i, "unitPrice", Number(e.target.value))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900" />
-                    </div>
-                    <div className="w-20 text-right text-sm py-1.5">${(item.qty * item.unitPrice).toFixed(2)}</div>
-                    <button type="button" onClick={() => removeLineItem(i)} className="text-red-500 text-xs pb-1.5">X</button>
+                    <span className="text-gray-400 text-sm">{isExpanded ? "▲" : "▼"}</span>
                   </div>
-                ))}
-                <div className="text-right font-semibold text-sm mt-1">
-                  Total: ${((editing.items || []).reduce((sum, item) => sum + item.qty * item.unitPrice, 0)).toFixed(2)}
+
+                  {isExpanded && (
+                    <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100">
+                      <div className="grid grid-cols-2 gap-2 text-sm py-3">
+                        <div><span className="text-gray-500">Customer:</span> {inv.customerName}</div>
+                        <div><span className="text-gray-500">Phone:</span> {inv.customerPhone || "—"}</div>
+                        <div><span className="text-gray-500">Email:</span> {inv.customerEmail || "—"}</div>
+                        {inv.paidAt && <div><span className="text-gray-500">Paid:</span> {new Date(inv.paidAt).toLocaleDateString()}</div>}
+                      </div>
+
+                      {/* Line items */}
+                      {inv.items && inv.items.length > 0 && (
+                        <table className="w-full text-xs mb-3">
+                          <thead>
+                            <tr className="text-gray-400 text-left border-b border-gray-100">
+                              <th className="py-1">Description</th>
+                              <th className="py-1 text-right">Qty</th>
+                              <th className="py-1 text-right">Price</th>
+                              <th className="py-1 text-right">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {inv.items.map((item, idx) => (
+                              <tr key={idx} className="border-b border-gray-50">
+                                <td className="py-1.5">{item.description}</td>
+                                <td className="py-1.5 text-right">{item.qty}</td>
+                                <td className="py-1.5 text-right">${item.unitPrice.toFixed(2)}</td>
+                                <td className="py-1.5 text-right">${item.total.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                            <tr className="font-semibold">
+                              <td colSpan={3} className="py-2 text-right text-gray-700">
+                                {inv.tax > 0 && <>Subtotal: ${inv.subtotal?.toFixed(2)} + Tax: ${inv.tax?.toFixed(2)}<br /></>}
+                                Total:
+                              </td>
+                              <td className="py-2 text-right text-navy">${total.toFixed(2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )}
+
+                      <div className="flex gap-2 mt-2">
+                        {inv.status !== "Paid" && (
+                          <button onClick={() => markPaid(inv.id)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">
+                            ✓ Mark Paid
+                          </button>
+                        )}
+                        <button onClick={() => deleteInvoice(inv.id)} className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200">
+                          🗑 Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-5">
-              <button type="submit" className="flex-1 py-2 bg-amber text-white rounded-lg hover:bg-amber-dark font-medium">Save</button>
-              <button type="button" onClick={() => setEditing(null)} className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">Cancel</button>
-            </div>
-          </form>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
   );
-}
-
-function Field({ label, type = "text", value, onChange }: { label: string; type?: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
-    </div>
-  );
-}
-
-function invStatusColor(status: string) {
-  const colors: Record<string, string> = {
-    Draft: "bg-gray-100 text-gray-700",
-    Sent: "bg-blue-100 text-blue-700",
-    Paid: "bg-green-100 text-green-700",
-    Overdue: "bg-red-100 text-red-700",
-  };
-  return colors[status] || "bg-gray-100 text-gray-700";
 }

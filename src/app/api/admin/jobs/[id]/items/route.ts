@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { dbGetInventory, dbCreateInventoryItem, dbUpdateInventoryItem, dbDeleteInventoryItem } from "@/lib/db";
+import { dbGetJobItems, dbCreateJobItem, dbDeleteJobItem } from "@/lib/db";
 
 async function auth() {
   const session = await getServerSession(authOptions);
@@ -8,26 +8,20 @@ async function auth() {
   return null;
 }
 
-export async function GET() {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = await auth();
   if (denied) return denied;
-  return Response.json(await dbGetInventory());
+  const { id } = await params;
+  const items = await dbGetJobItems(id);
+  return Response.json(items);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = await auth();
   if (denied) return denied;
+  const { id } = await params;
   const body = await request.json();
-  const item = await dbCreateInventoryItem(body);
-  return Response.json(item);
-}
-
-export async function PUT(request: Request) {
-  const denied = await auth();
-  if (denied) return denied;
-  const body = await request.json();
-  const item = await dbUpdateInventoryItem(body.id, body);
-  if (!item) return Response.json({ error: "Not found" }, { status: 404 });
+  const item = await dbCreateJobItem({ ...body, jobId: id });
   return Response.json(item);
 }
 
@@ -35,6 +29,6 @@ export async function DELETE(request: Request) {
   const denied = await auth();
   if (denied) return denied;
   const { id } = await request.json();
-  await dbDeleteInventoryItem(id);
+  await dbDeleteJobItem(id);
   return Response.json({ success: true });
 }

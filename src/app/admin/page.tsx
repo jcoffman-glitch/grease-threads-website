@@ -23,9 +23,9 @@ export default function AdminDashboard() {
   if (loading) return <div className="text-gray-500">Loading...</div>;
 
   const openJobs = jobs.filter((j) => !["Completed", "Invoiced", "Paid"].includes(j.status));
-  const totalInvoiced = invoices.reduce((sum, i) => sum + i.amount, 0);
+  const totalInvoiced = invoices.reduce((sum, i) => sum + (i.total ?? i.amount ?? 0), 0);
   const unpaidInvoices = invoices.filter((i) => i.status !== "Paid");
-  const recentJobs = [...jobs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
+  const recentJobs = [...jobs].sort((a, b) => new Date(b.createdAt ?? b.date ?? "").getTime() - new Date(a.createdAt ?? a.date ?? "").getTime()).slice(0, 5);
 
   const cards = [
     { label: "Total Jobs", value: jobs.length, href: "/admin/jobs" },
