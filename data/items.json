@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "name": "Test Part 2",
+    "description": "Replace Test Part 2",
+    "price": 10,
+    "category": "HVAC",
+    "id": "0ff43f92-bf5a-448f-94a7-c42f15b2a0e5"
+  }
+]
