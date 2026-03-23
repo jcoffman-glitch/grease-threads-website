@@ -1,206 +1,423 @@
 /**
- * Database abstraction layer for Grease & Threads Admin.
- * 
- * Currently uses GitHub JSON for storage (zero-config, works now).
- * To upgrade to Turso SQLite at the edge:
- *   1. Sign up at https://turso.tech
- *   2. Run: turso db create gnt-db && turso db tokens create gnt-db
- *   3. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN as Vercel env vars
- *   4. npm install @libsql/client
- *   5. Uncomment the Turso implementation below
+ * Database layer for Grease & Threads Admin.
+ * Uses Turso (libSQL) for persistent SQLite storage.
  */
 
-import { readData, writeData } from "./data";
-import type { Job, JobItem, InventoryItem, Invoice, PriceListItem } from "./types";
+import { createClient } from "@libsql/client/http";
 import { randomUUID } from "crypto";
+import type { Job, JobItem, InventoryItem, Invoice, PriceListItem } from "./types";
+
+const client = createClient({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN!,
+});
+
+// ── Schema Migration (idempotent) ──────────────────────────────────────────────
+
+let schemaEnsured = false;
+
+export async function ensureSchema(): Promise<void> {
+  if (schemaEnsured) return;
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      job_number TEXT UNIQUE,
+      created_at TEXT,
+      customer_name TEXT,
+      customer_phone TEXT,
+      customer_email TEXT,
+      service_type TEXT,
+      problem_description TEXT,
+      address TEXT,
+      scheduled_at TEXT,
+      status TEXT DEFAULT 'Lead',
+      notes TEXT,
+      tracking_token TEXT UNIQUE,
+      google_review_sent INTEGER DEFAULT 0,
+      sheets_synced INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS job_items (
+      id TEXT PRIMARY KEY,
+      job_id TEXT,
+      item_type TEXT,
+      description TEXT,
+      quantity REAL DEFAULT 1,
+      unit_price REAL,
+      created_at TEXT,
+      FOREIGN KEY (job_id) REFERENCES jobs(id)
+    );
+    CREATE TABLE IF NOT EXISTS inventory (
+      id TEXT PRIMARY KEY,
+      part_number TEXT UNIQUE,
+      description TEXT,
+      category TEXT,
+      qty_on_hand REAL DEFAULT 0,
+      reorder_point REAL DEFAULT 2,
+      unit_cost REAL,
+      retail_price REAL,
+      supplier TEXT,
+      updated_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS invoices (
+      id TEXT PRIMARY KEY,
+      invoice_number TEXT UNIQUE,
+      job_id TEXT,
+      created_at TEXT,
+      customer_name TEXT,
+      customer_email TEXT,
+      customer_phone TEXT,
+      subtotal REAL,
+      tax REAL DEFAULT 0,
+      total REAL,
+      status TEXT DEFAULT 'Draft',
+      paid_at TEXT,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS price_list (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      description TEXT,
+      default_price REAL,
+      item_type TEXT
+    );
+  `);
+  schemaEnsured = true;
+}
+
+// ── Row Mappers ────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToJob(r: any): Job {
+  return {
+    id: r.id,
+    jobNumber: r.job_number,
+    createdAt: r.created_at,
+    customerName: r.customer_name,
+    customerPhone: r.customer_phone,
+    customerEmail: r.customer_email,
+    serviceType: r.service_type,
+    problemDescription: r.problem_description,
+    address: r.address,
+    scheduledAt: r.scheduled_at,
+    status: r.status,
+    notes: r.notes,
+    trackingToken: r.tracking_token,
+    googleReviewSent: !!r.google_review_sent,
+    sheetsSynced: !!r.sheets_synced,
+    date: r.created_at?.split("T")[0],
+    phone: r.customer_phone,
+    amount: 0,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToJobItem(r: any): JobItem {
+  return {
+    id: r.id,
+    jobId: r.job_id,
+    itemType: r.item_type,
+    description: r.description,
+    quantity: r.quantity,
+    unitPrice: r.unit_price,
+    createdAt: r.created_at,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToInventory(r: any): InventoryItem {
+  return {
+    id: r.id,
+    partNumber: r.part_number,
+    description: r.description,
+    category: r.category,
+    qtyOnHand: r.qty_on_hand,
+    reorderPoint: r.reorder_point,
+    unitCost: r.unit_cost,
+    retailPrice: r.retail_price,
+    supplier: r.supplier,
+    updatedAt: r.updated_at,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToInvoice(r: any): Invoice {
+  return {
+    id: r.id,
+    invoiceNumber: r.invoice_number,
+    jobId: r.job_id,
+    createdAt: r.created_at,
+    customerName: r.customer_name,
+    customerEmail: r.customer_email,
+    customerPhone: r.customer_phone,
+    subtotal: r.subtotal,
+    tax: r.tax,
+    total: r.total,
+    status: r.status,
+    paidAt: r.paid_at,
+    notes: r.notes,
+    items: [],
+    amount: r.total,
+    date: r.created_at?.split("T")[0],
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToPriceListItem(r: any): PriceListItem {
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    defaultPrice: r.default_price,
+    itemType: r.item_type,
+  };
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function generateJobNumber(jobs: Job[]): string {
+async function generateJobNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const yearJobs = jobs.filter((j) => j.jobNumber?.startsWith(String(year)));
-  const seq = yearJobs.length + 1;
-  return `${year}-${String(seq).padStart(4, "0")}`;
+  const res = await client.execute({
+    sql: `SELECT COUNT(*) as cnt FROM jobs WHERE job_number LIKE ?`,
+    args: [`${year}-%`],
+  });
+  const cnt = Number(res.rows[0].cnt) + 1;
+  return `${year}-${String(cnt).padStart(4, "0")}`;
 }
 
-function generateInvoiceNumber(invoices: Invoice[]): string {
+async function generateInvoiceNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const seq = invoices.length + 1;
-  return `INV-${year}-${String(seq).padStart(4, "0")}`;
+  const res = await client.execute({
+    sql: `SELECT COUNT(*) as cnt FROM invoices WHERE invoice_number LIKE ?`,
+    args: [`INV-${year}-%`],
+  });
+  const cnt = Number(res.rows[0].cnt) + 1;
+  return `INV-${year}-${String(cnt).padStart(4, "0")}`;
 }
 
 function generateTrackingToken(): string {
-  // 8-char alphanumeric token for customer tracking URLs
   return randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase();
 }
 
 // ── Jobs ─────────────────────────────────────────────────────────────────────
 
 export async function dbGetJobs(): Promise<Job[]> {
-  return readData<Job>("jobs.json");
+  await ensureSchema();
+  const res = await client.execute("SELECT * FROM jobs ORDER BY created_at DESC");
+  return res.rows.map(rowToJob);
 }
 
 export async function dbCreateJob(data: Partial<Job>): Promise<Job> {
-  const jobs = await dbGetJobs();
-  const job: Job = {
-    id: randomUUID(),
-    jobNumber: generateJobNumber(jobs),
-    createdAt: new Date().toISOString(),
-    customerName: data.customerName || "",
-    customerPhone: data.customerPhone || data.phone || "",
-    customerEmail: data.customerEmail,
-    serviceType: data.serviceType || "Other",
-    problemDescription: data.problemDescription || data.notes || "",
-    address: data.address,
-    scheduledAt: data.scheduledAt,
-    status: data.status || "Lead",
-    notes: data.notes,
-    trackingToken: generateTrackingToken(),
-    googleReviewSent: false,
-    sheetsSynced: false,
-    // Legacy compat
-    date: data.date || new Date().toISOString().split("T")[0],
-    phone: data.customerPhone || data.phone || "",
-    amount: data.amount || 0,
-  };
-  await writeData("jobs.json", [...jobs, job]);
-  // Fire-and-forget Google Sheets sync
-  syncJobToSheets(job).catch(() => {});
-  return job;
+  await ensureSchema();
+  const id = randomUUID();
+  const jobNumber = await generateJobNumber();
+  const createdAt = new Date().toISOString();
+  const trackingToken = generateTrackingToken();
+  await client.execute({
+    sql: `INSERT INTO jobs (id, job_number, created_at, customer_name, customer_phone, customer_email, service_type, problem_description, address, scheduled_at, status, notes, tracking_token, google_review_sent, sheets_synced)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+    args: [
+      id, jobNumber, createdAt,
+      data.customerName || "",
+      data.customerPhone || data.phone || "",
+      data.customerEmail || null,
+      data.serviceType || "Other",
+      data.problemDescription || data.notes || "",
+      data.address || null,
+      data.scheduledAt || null,
+      data.status || "Lead",
+      data.notes || null,
+      trackingToken,
+    ],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM jobs WHERE id = ?", args: [id] });
+  return rowToJob(row.rows[0]);
 }
 
 export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job | null> {
-  const jobs = await dbGetJobs();
-  const idx = jobs.findIndex((j) => j.id === id);
-  if (idx === -1) return null;
-  const updated = { ...jobs[idx], ...data, id };
-  jobs[idx] = updated;
-  await writeData("jobs.json", jobs);
-  // Fire-and-forget sync
-  syncJobToSheets(updated).catch(() => {});
-  return updated;
+  await ensureSchema();
+  const existing = await client.execute({ sql: "SELECT * FROM jobs WHERE id = ?", args: [id] });
+  if (!existing.rows.length) return null;
+  const cur = rowToJob(existing.rows[0]);
+  await client.execute({
+    sql: `UPDATE jobs SET customer_name=?, customer_phone=?, customer_email=?, service_type=?, problem_description=?, address=?, scheduled_at=?, status=?, notes=?, google_review_sent=?, sheets_synced=? WHERE id=?`,
+    args: [
+      data.customerName ?? cur.customerName,
+      data.customerPhone ?? cur.customerPhone,
+      data.customerEmail ?? cur.customerEmail ?? null,
+      data.serviceType ?? cur.serviceType,
+      data.problemDescription ?? cur.problemDescription,
+      data.address ?? cur.address ?? null,
+      data.scheduledAt ?? cur.scheduledAt ?? null,
+      data.status ?? cur.status,
+      data.notes ?? cur.notes ?? null,
+      data.googleReviewSent !== undefined ? (data.googleReviewSent ? 1 : 0) : (cur.googleReviewSent ? 1 : 0),
+      data.sheetsSynced !== undefined ? (data.sheetsSynced ? 1 : 0) : (cur.sheetsSynced ? 1 : 0),
+      id,
+    ],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM jobs WHERE id = ?", args: [id] });
+  return rowToJob(row.rows[0]);
 }
 
 export async function dbDeleteJob(id: string): Promise<void> {
-  const jobs = await dbGetJobs();
-  await writeData("jobs.json", jobs.filter((j) => j.id !== id));
+  await ensureSchema();
+  await client.execute({ sql: "DELETE FROM jobs WHERE id = ?", args: [id] });
 }
 
 export async function dbGetJobByToken(token: string): Promise<Job | null> {
-  const jobs = await dbGetJobs();
-  return jobs.find((j) => j.trackingToken === token) || null;
+  await ensureSchema();
+  const res = await client.execute({ sql: "SELECT * FROM jobs WHERE tracking_token = ?", args: [token] });
+  if (!res.rows.length) return null;
+  return rowToJob(res.rows[0]);
 }
 
 // ── Job Items ─────────────────────────────────────────────────────────────────
 
 export async function dbGetJobItems(jobId: string): Promise<JobItem[]> {
-  const items = await readData<JobItem>("items.json");
-  return items.filter((i) => i.jobId === jobId);
+  await ensureSchema();
+  const res = await client.execute({ sql: "SELECT * FROM job_items WHERE job_id = ?", args: [jobId] });
+  return res.rows.map(rowToJobItem);
 }
 
 export async function dbCreateJobItem(data: Partial<JobItem>): Promise<JobItem> {
-  const items = await readData<JobItem>("items.json");
-  const item: JobItem = {
-    id: randomUUID(),
-    jobId: data.jobId || "",
-    itemType: data.itemType || "Labor",
-    description: data.description || "",
-    quantity: data.quantity || 1,
-    unitPrice: data.unitPrice || 0,
-    createdAt: new Date().toISOString(),
-  };
-  await writeData("items.json", [...items, item]);
-  return item;
+  await ensureSchema();
+  const id = randomUUID();
+  const createdAt = new Date().toISOString();
+  await client.execute({
+    sql: `INSERT INTO job_items (id, job_id, item_type, description, quantity, unit_price, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, data.jobId || "", data.itemType || "Labor", data.description || "", data.quantity ?? 1, data.unitPrice ?? 0, createdAt],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM job_items WHERE id = ?", args: [id] });
+  return rowToJobItem(row.rows[0]);
 }
 
 export async function dbDeleteJobItem(id: string): Promise<void> {
-  const items = await readData<JobItem>("items.json");
-  await writeData("items.json", items.filter((i) => i.id !== id));
+  await ensureSchema();
+  await client.execute({ sql: "DELETE FROM job_items WHERE id = ?", args: [id] });
 }
 
 // ── Inventory ──────────────────────────────────────────────────────────────────
 
 export async function dbGetInventory(): Promise<InventoryItem[]> {
-  return readData<InventoryItem>("inventory.json");
+  await ensureSchema();
+  const res = await client.execute("SELECT * FROM inventory ORDER BY description");
+  return res.rows.map(rowToInventory);
 }
 
 export async function dbCreateInventoryItem(data: Partial<InventoryItem>): Promise<InventoryItem> {
-  const items = await dbGetInventory();
-  const item: InventoryItem = {
-    id: randomUUID(),
-    partNumber: data.partNumber || `PN-${Date.now()}`,
-    description: data.description || data.partName || "",
-    category: data.category || "General",
-    qtyOnHand: data.qtyOnHand ?? data.qty ?? 0,
-    reorderPoint: data.reorderPoint || 2,
-    unitCost: data.unitCost || 0,
-    retailPrice: data.retailPrice || 0,
-    supplier: data.supplier,
-    updatedAt: new Date().toISOString(),
-  };
-  await writeData("inventory.json", [...items, item]);
-  return item;
+  await ensureSchema();
+  const id = randomUUID();
+  const updatedAt = new Date().toISOString();
+  await client.execute({
+    sql: `INSERT INTO inventory (id, part_number, description, category, qty_on_hand, reorder_point, unit_cost, retail_price, supplier, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      data.partNumber || `PN-${Date.now()}`,
+      data.description || data.partName || "",
+      data.category || "General",
+      data.qtyOnHand ?? data.qty ?? 0,
+      data.reorderPoint ?? 2,
+      data.unitCost ?? 0,
+      data.retailPrice ?? 0,
+      data.supplier || null,
+      updatedAt,
+    ],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM inventory WHERE id = ?", args: [id] });
+  return rowToInventory(row.rows[0]);
 }
 
 export async function dbUpdateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem | null> {
-  const items = await dbGetInventory();
-  const idx = items.findIndex((i) => i.id === id);
-  if (idx === -1) return null;
-  const updated = { ...items[idx], ...data, id, updatedAt: new Date().toISOString() };
-  items[idx] = updated;
-  await writeData("inventory.json", items);
-  return updated;
+  await ensureSchema();
+  const existing = await client.execute({ sql: "SELECT * FROM inventory WHERE id = ?", args: [id] });
+  if (!existing.rows.length) return null;
+  const cur = rowToInventory(existing.rows[0]);
+  const updatedAt = new Date().toISOString();
+  await client.execute({
+    sql: `UPDATE inventory SET part_number=?, description=?, category=?, qty_on_hand=?, reorder_point=?, unit_cost=?, retail_price=?, supplier=?, updated_at=? WHERE id=?`,
+    args: [
+      data.partNumber ?? cur.partNumber,
+      data.description ?? cur.description,
+      data.category ?? cur.category,
+      data.qtyOnHand ?? cur.qtyOnHand,
+      data.reorderPoint ?? cur.reorderPoint,
+      data.unitCost ?? cur.unitCost,
+      data.retailPrice ?? cur.retailPrice,
+      data.supplier ?? cur.supplier ?? null,
+      updatedAt,
+      id,
+    ],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM inventory WHERE id = ?", args: [id] });
+  return rowToInventory(row.rows[0]);
 }
 
 export async function dbDeleteInventoryItem(id: string): Promise<void> {
-  const items = await dbGetInventory();
-  await writeData("inventory.json", items.filter((i) => i.id !== id));
+  await ensureSchema();
+  await client.execute({ sql: "DELETE FROM inventory WHERE id = ?", args: [id] });
 }
 
 // ── Invoices ───────────────────────────────────────────────────────────────────
 
 export async function dbGetInvoices(): Promise<Invoice[]> {
-  return readData<Invoice>("invoices.json");
+  await ensureSchema();
+  const res = await client.execute("SELECT * FROM invoices ORDER BY created_at DESC");
+  return res.rows.map(rowToInvoice);
 }
 
 export async function dbCreateInvoice(data: Partial<Invoice>): Promise<Invoice> {
-  const invoices = await dbGetInvoices();
-  const invoice: Invoice = {
-    id: randomUUID(),
-    invoiceNumber: generateInvoiceNumber(invoices),
-    jobId: data.jobId,
-    createdAt: new Date().toISOString(),
-    customerName: data.customerName || "",
-    customerEmail: data.customerEmail,
-    customerPhone: data.customerPhone || "",
-    subtotal: data.subtotal || 0,
-    tax: data.tax || 0,
-    total: data.total || data.subtotal || 0,
-    status: data.status || "Draft",
-    paidAt: data.paidAt,
-    notes: data.notes,
-    items: data.items || [],
-    // Legacy compat
-    amount: data.total || data.subtotal || 0,
-    date: new Date().toISOString().split("T")[0],
-  };
-  await writeData("invoices.json", [...invoices, invoice]);
-  return invoice;
+  await ensureSchema();
+  const id = randomUUID();
+  const invoiceNumber = await generateInvoiceNumber();
+  const createdAt = new Date().toISOString();
+  await client.execute({
+    sql: `INSERT INTO invoices (id, invoice_number, job_id, created_at, customer_name, customer_email, customer_phone, subtotal, tax, total, status, paid_at, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id, invoiceNumber,
+      data.jobId || null,
+      createdAt,
+      data.customerName || "",
+      data.customerEmail || null,
+      data.customerPhone || "",
+      data.subtotal ?? 0,
+      data.tax ?? 0,
+      data.total ?? data.subtotal ?? 0,
+      data.status || "Draft",
+      data.paidAt || null,
+      data.notes || null,
+    ],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM invoices WHERE id = ?", args: [id] });
+  return rowToInvoice(row.rows[0]);
 }
 
 export async function dbUpdateInvoice(id: string, data: Partial<Invoice>): Promise<Invoice | null> {
-  const invoices = await dbGetInvoices();
-  const idx = invoices.findIndex((i) => i.id === id);
-  if (idx === -1) return null;
-  const updated = { ...invoices[idx], ...data, id };
-  invoices[idx] = updated;
-  await writeData("invoices.json", invoices);
-  return updated;
+  await ensureSchema();
+  const existing = await client.execute({ sql: "SELECT * FROM invoices WHERE id = ?", args: [id] });
+  if (!existing.rows.length) return null;
+  const cur = rowToInvoice(existing.rows[0]);
+  await client.execute({
+    sql: `UPDATE invoices SET customer_name=?, customer_email=?, customer_phone=?, subtotal=?, tax=?, total=?, status=?, paid_at=?, notes=? WHERE id=?`,
+    args: [
+      data.customerName ?? cur.customerName,
+      data.customerEmail ?? cur.customerEmail ?? null,
+      data.customerPhone ?? cur.customerPhone,
+      data.subtotal ?? cur.subtotal,
+      data.tax ?? cur.tax,
+      data.total ?? cur.total,
+      data.status ?? cur.status,
+      data.paidAt ?? cur.paidAt ?? null,
+      data.notes ?? cur.notes ?? null,
+      id,
+    ],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM invoices WHERE id = ?", args: [id] });
+  return rowToInvoice(row.rows[0]);
 }
 
 export async function dbDeleteInvoice(id: string): Promise<void> {
-  const invoices = await dbGetInvoices();
-  await writeData("invoices.json", invoices.filter((i) => i.id !== id));
+  await ensureSchema();
+  await client.execute({ sql: "DELETE FROM invoices WHERE id = ?", args: [id] });
 }
 
 export async function dbGenerateInvoiceFromJob(jobId: string): Promise<Invoice | null> {
@@ -226,7 +443,6 @@ export async function dbGenerateInvoiceFromJob(jobId: string): Promise<Invoice |
     status: "Draft",
     items: lineItems,
   });
-  // Update job status to Invoiced
   await dbUpdateJob(jobId, { status: "Invoiced" });
   return invoice;
 }
@@ -234,79 +450,42 @@ export async function dbGenerateInvoiceFromJob(jobId: string): Promise<Invoice |
 // ── Price List ─────────────────────────────────────────────────────────────────
 
 export async function dbGetPriceList(): Promise<PriceListItem[]> {
-  const items = await readData<PriceListItem>("price-list.json");
-  return items;
+  await ensureSchema();
+  const res = await client.execute("SELECT * FROM price_list ORDER BY name");
+  return res.rows.map(rowToPriceListItem);
 }
 
 export async function dbCreatePriceListItem(data: Partial<PriceListItem>): Promise<PriceListItem> {
-  const items = await dbGetPriceList();
-  const item: PriceListItem = {
-    id: randomUUID(),
-    name: data.name || "",
-    description: data.description,
-    defaultPrice: data.defaultPrice || data.price || 0,
-    itemType: data.itemType || "Labor",
-  };
-  await writeData("price-list.json", [...items, item]);
-  return item;
+  await ensureSchema();
+  const id = randomUUID();
+  await client.execute({
+    sql: `INSERT INTO price_list (id, name, description, default_price, item_type) VALUES (?, ?, ?, ?, ?)`,
+    args: [id, data.name || "", data.description || null, data.defaultPrice ?? data.price ?? 0, data.itemType || "Labor"],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM price_list WHERE id = ?", args: [id] });
+  return rowToPriceListItem(row.rows[0]);
 }
 
 export async function dbUpdatePriceListItem(id: string, data: Partial<PriceListItem>): Promise<PriceListItem | null> {
-  const items = await dbGetPriceList();
-  const idx = items.findIndex((i) => i.id === id);
-  if (idx === -1) return null;
-  const updated = { ...items[idx], ...data, id };
-  items[idx] = updated;
-  await writeData("price-list.json", items);
-  return updated;
+  await ensureSchema();
+  const existing = await client.execute({ sql: "SELECT * FROM price_list WHERE id = ?", args: [id] });
+  if (!existing.rows.length) return null;
+  const cur = rowToPriceListItem(existing.rows[0]);
+  await client.execute({
+    sql: `UPDATE price_list SET name=?, description=?, default_price=?, item_type=? WHERE id=?`,
+    args: [
+      data.name ?? cur.name,
+      data.description ?? cur.description ?? null,
+      data.defaultPrice ?? cur.defaultPrice,
+      data.itemType ?? cur.itemType,
+      id,
+    ],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM price_list WHERE id = ?", args: [id] });
+  return rowToPriceListItem(row.rows[0]);
 }
 
 export async function dbDeletePriceListItem(id: string): Promise<void> {
-  const items = await dbGetPriceList();
-  await writeData("price-list.json", items.filter((i) => i.id !== id));
-}
-
-// ── Google Sheets Sync (fire-and-forget) ─────────────────────────────────────
-
-async function syncJobToSheets(job: Job): Promise<void> {
-  try {
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID || "",
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
-        refresh_token: process.env.GOOGLE_REFRESH_TOKEN || "",
-        grant_type: "refresh_token",
-      }),
-    });
-    if (!tokenRes.ok) return;
-    const { access_token } = await tokenRes.json();
-    const SHEET_ID = "1MAd1OZ0kxvHYcIQy4aHE_k0RZU0Wk3vpYlQS-xH4MAs";
-    const row = [
-      job.createdAt,
-      job.jobNumber,
-      job.customerName,
-      job.customerPhone,
-      job.serviceType,
-      job.problemDescription,
-      job.status,
-      job.scheduledAt || "",
-      job.notes || "",
-      job.trackingToken,
-    ];
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Sheet1!A:J:append?valueInputOption=USER_ENTERED`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ values: [row] }),
-      }
-    );
-  } catch {
-    // Non-blocking - silently fail
-  }
+  await ensureSchema();
+  await client.execute({ sql: "DELETE FROM price_list WHERE id = ?", args: [id] });
 }
