@@ -1,0 +1,10 @@
+[
+  {"id":"pl-001","name":"Service Call / Diagnostic","description":"Standard diagnostic fee","defaultPrice":75,"itemType":"Fee"},
+  {"id":"pl-002","name":"Labor - Standard (per hour)","description":"Standard labor rate","defaultPrice":95,"itemType":"Labor"},
+  {"id":"pl-003","name":"Refrigerant R-22 (per lb)","description":"R-22 refrigerant","defaultPrice":85,"itemType":"Part"},
+  {"id":"pl-004","name":"Refrigerant R-410A (per lb)","description":"R-410A refrigerant","defaultPrice":35,"itemType":"Part"},
+  {"id":"pl-005","name":"Capacitor - Start/Run","description":"Standard HVAC capacitor","defaultPrice":45,"itemType":"Part"},
+  {"id":"pl-006","name":"Contactor","description":"HVAC contactor","defaultPrice":65,"itemType":"Part"},
+  {"id":"pl-007","name":"Filter Change","description":"Standard 1\" filter","defaultPrice":25,"itemType":"Labor"},
+  {"id":"pl-008","name":"Coil Cleaning","description":"Evaporator or condenser coil cleaning","defaultPrice":150,"itemType":"Labor"}
+]
