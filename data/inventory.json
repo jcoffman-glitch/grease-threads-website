@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "partName": "Test Part",
+    "partNumber": "1",
+    "category": "Testing",
+    "qty": 1,
+    "reorderPoint": 5,
+    "unitCost": 5,
+    "supplier": "ACME",
+    "id": "99381fe1-bd69-4b88-a94e-b2bc54dd6207"
+  }
+]
