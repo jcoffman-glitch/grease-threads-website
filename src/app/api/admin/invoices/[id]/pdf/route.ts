@@ -125,7 +125,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     <div class="payment-text">Please contact us to arrange payment. Call or text (812) 564-3719.</div>
   </div>
 
-  <div class="footer">Thank you for your business! — Rick &amp; Grease &amp; Threads</div>
+  <div class="footer">Thank you for your business! — Joe — Grease &amp; Threads</div>
 
   <script>window.onload = function() { window.print(); }</script>
 </body>

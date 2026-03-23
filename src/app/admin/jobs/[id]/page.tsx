@@ -161,7 +161,7 @@ export default function JobDetailPage() {
   const total = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
   const showInvoiceSection = ["Completed", "Invoiced", "Paid"].includes(job.status);
   const showReviewPrompt = ["Completed", "Paid"].includes(job.status);
-  const reviewMessage = `Hi ${job.customerName}! Thanks for calling Grease & Threads. If you have a moment, a Google review really helps: ${GOOGLE_REVIEW_URL} — Thanks! -Rick`;
+  const reviewMessage = `Hi ${job.customerName}! Thanks for calling Grease & Threads. If you have a moment, a Google review really helps: ${GOOGLE_REVIEW_URL} — Thanks! -Joe`;
   const trackUrl = typeof window !== "undefined"
     ? `${window.location.origin}/track/${job.trackingToken}`
     : `/track/${job.trackingToken}`;

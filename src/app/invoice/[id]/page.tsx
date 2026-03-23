@@ -132,7 +132,7 @@ export default function PublicInvoicePage() {
               💳 Pay Now — Coming Soon
             </button>
             <p className="text-center text-xs text-gray-400 mt-2">
-              To pay now, please call or text Rick at (812) 564-3719
+              To pay now, please call or text Joe at (812) 564-3719
             </p>
           </div>
         )}

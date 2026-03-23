@@ -17,6 +17,7 @@ export interface Job {
   trackingToken: string;      // for /track/[token] public page
   googleReviewSent: boolean;
   sheetsSynced: boolean;
+  leadSource?: string;
   // Legacy fields for backward compatibility
   date?: string;
   phone?: string;
