@@ -1,9 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { readData, writeData } from "@/lib/data";
+import { getInvoices, createInvoice, updateInvoice, deleteInvoice } from "@/lib/sheets";
 import type { Invoice } from "@/lib/types";
-
-const FILE = "invoices.json";
 
 async function auth() {
   const session = await getServerSession(authOptions);
@@ -14,17 +12,14 @@ async function auth() {
 export async function GET() {
   const denied = await auth();
   if (denied) return denied;
-  return Response.json(await readData<Invoice>(FILE));
+  return Response.json(await getInvoices());
 }
 
 export async function POST(request: Request) {
   const denied = await auth();
   if (denied) return denied;
   const body = await request.json();
-  const data = await readData<Invoice>(FILE);
-  const item: Invoice = { ...body, id: crypto.randomUUID() };
-  data.push(item);
-  await writeData(FILE, data);
+  const item = await createInvoice(body as Omit<Invoice, "id">);
   return Response.json(item);
 }
 
@@ -32,20 +27,15 @@ export async function PUT(request: Request) {
   const denied = await auth();
   if (denied) return denied;
   const body = await request.json();
-  const data = await readData<Invoice>(FILE);
-  const index = data.findIndex((d) => d.id === body.id);
-  if (index === -1) return Response.json({ error: "Not found" }, { status: 404 });
-  data[index] = { ...data[index], ...body };
-  await writeData(FILE, data);
-  return Response.json(data[index]);
+  const item = await updateInvoice(body.id, body);
+  if (!item) return Response.json({ error: "Not found" }, { status: 404 });
+  return Response.json(item);
 }
 
 export async function DELETE(request: Request) {
   const denied = await auth();
   if (denied) return denied;
   const { id } = await request.json();
-  const data = await readData<Invoice>(FILE);
-  const filtered = data.filter((d) => d.id !== id);
-  await writeData(FILE, filtered);
+  await deleteInvoice(id);
   return Response.json({ success: true });
 }
