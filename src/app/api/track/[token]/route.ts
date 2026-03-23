@@ -6,13 +6,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   const job = await dbGetJobByToken(token);
   if (!job) return Response.json({ error: "Not found" }, { status: 404 });
 
-  // Return only customer-safe fields
+  // Return only customer-safe fields — no email, internal notes, or financial data
+  const firstName = (job.customerName || "").split(" ")[0];
   return Response.json({
     jobNumber: job.jobNumber,
     status: job.status,
     serviceType: job.serviceType,
-    customerName: job.customerName,
+    customerName: firstName,
     scheduledAt: job.scheduledAt,
-    problemDescription: job.problemDescription,
   });
 }
