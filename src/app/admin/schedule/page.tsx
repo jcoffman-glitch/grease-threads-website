@@ -38,6 +38,7 @@ function getDateGroup(date: Date): string {
 
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
+  if (d < today) return "⚠️ Past Due";
   if (d.getTime() === today.getTime()) return "Today";
   if (d.getTime() === tomorrow.getTime()) return "Tomorrow";
   if (d <= endOfWeek) return "This Week";
@@ -60,15 +61,17 @@ export default function SchedulePage() {
       .catch(() => setLoading(false));
   }, []);
 
-  // Filter to upcoming scheduled jobs
+  // Filter to scheduled jobs — show past jobs that are still active (not done/paid/reviewed)
+  const DONE_STATUSES = new Set(["Job Done", "Final Invoice", "Payment", "Review", "Completed", "Invoiced", "Paid"]);
   const now = new Date();
   const upcoming = jobs
     .filter(j => {
       if (!j.scheduledAt) return false;
-      // Include today and future
       const d = new Date(j.scheduledAt);
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      return d >= today;
+      // Show future + today always; show past only if job isn't finished
+      if (d >= today) return true;
+      return !DONE_STATUSES.has(j.status || "");
     })
     .filter(j => {
       if (filter === "All") return true;
@@ -82,7 +85,7 @@ export default function SchedulePage() {
 
   // Group by date
   const groups: Record<string, Job[]> = {};
-  const groupOrder = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
+  const groupOrder = ["⚠️ Past Due", "Today", "Tomorrow", "This Week", "Next Week", "Later"];
   for (const job of upcoming) {
     const group = getDateGroup(new Date(job.scheduledAt!));
     if (!groups[group]) groups[group] = [];
