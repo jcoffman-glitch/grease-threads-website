@@ -96,10 +96,18 @@ export const authOptions: AuthOptions = {
         if (!user.email) {
           // Credentials login → admin
           token.role = "admin";
-        } else if (user.email === "anthoney@greasethreads.com") {
+        } else if (
+          user.email === "anthoney@greasethreads.com" ||
+          user.email === "gnt-test-tech@greasethreads.com"
+        ) {
           token.role = "technician";
         } else if (user.email === ryanEmail) {
           token.role = "it";
+        } else if (
+          user.email === "gnt-test-customer@greasethreads.com" ||
+          !user.email.endsWith("@greasethreads.com")
+        ) {
+          token.role = "customer";
         } else if (user.email.endsWith("@greasethreads.com")) {
           token.role = "admin";
         } else {

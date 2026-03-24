@@ -246,7 +246,7 @@ export default function WorkOrderPage() {
       </div>
 
       {/* Status Bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-3 overflow-x-auto">
+      <div data-testid="status-bar" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-3 overflow-x-auto">
         <div className="flex gap-1.5 min-w-max">
           {V2_STATUSES.map((s, i) => {
             const isActive = displayStatus === s;

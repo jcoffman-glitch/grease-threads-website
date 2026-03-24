@@ -102,7 +102,7 @@ export default function SchedulePage() {
       <h1 className="text-2xl font-black text-navy mb-4">Schedule</h1>
 
       {/* Filter bar */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+      <div data-testid="schedule-filter-bar" className="flex gap-2 mb-4 overflow-x-auto pb-1">
         {FILTERS.map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all active:scale-95 ${
@@ -121,7 +121,7 @@ export default function SchedulePage() {
           <p className="text-gray-500 font-medium">No upcoming jobs{filter !== "All" ? ` for "${filter}"` : ""}</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div data-testid="schedule-job-list" className="space-y-6">
           {groupOrder.map(group => {
             const groupJobs = groups[group];
             if (!groupJobs || groupJobs.length === 0) return null;
