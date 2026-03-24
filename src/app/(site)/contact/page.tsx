@@ -52,8 +52,19 @@ export default function ContactPage() {
         </div>
       </section>
 
-      <section className="py-16">
-        <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-12">
+      {/* Phone Banner */}
+      <section className="bg-amber py-6">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <p className="text-white font-semibold mb-1">Fastest way to reach us:</p>
+          <a href="tel:8125643719" className="text-white text-3xl md:text-4xl font-bold hover:underline">
+            (812) 564-3719
+          </a>
+          <p className="text-white/80 text-sm mt-1">We answer our phones. Call anytime.</p>
+        </div>
+      </section>
+
+      <section className="py-12 md:py-16">
+        <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
           {/* Contact Form */}
           <div>
             <h2 className="text-2xl font-bold mb-6">Send Us a Message</h2>

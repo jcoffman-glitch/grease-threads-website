@@ -41,9 +41,30 @@ const services = [
   },
 ];
 
+const testimonials = [
+  {
+    name: "Sarah M.",
+    location: "Sullivan, IN",
+    text: "He came out same day, figured out the problem in 20 minutes, and only charged me for what it actually needed. Refreshing.",
+    stars: 5,
+  },
+  {
+    name: "Tom K.",
+    location: "Vincennes, IN",
+    text: "Our commercial fryer went down on a Friday night. He was there Saturday morning and had us back up by noon. Saved the weekend.",
+    stars: 5,
+  },
+  {
+    name: "Linda R.",
+    location: "Carlisle, IN",
+    text: "Most honest repairman I've dealt with in years. Told me straight what was wrong and what it would cost before touching anything.",
+    stars: 5,
+  },
+];
+
 export default function Home() {
   return (
-    <main>
+    <main className="pb-16 md:pb-0">
       {/* Hero */}
       <section className="bg-navy text-white py-16 md:py-24">
         <div className="max-w-6xl mx-auto px-4 text-center">
@@ -74,17 +95,59 @@ export default function Home() {
         </div>
       </section>
 
-      {/* $75 Diagnostic */}
-      <section className="bg-amber py-12 md:py-16">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-2xl md:text-4xl font-bold text-white mb-4">
-            Start with a $75 Diagnostic.
+      {/* Trust Bar */}
+      <section className="bg-amber py-8">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="grid grid-cols-3 gap-4 text-center text-white">
+            <div>
+              <div className="text-2xl md:text-4xl font-bold">30+</div>
+              <div className="text-sm md:text-base font-medium text-white/90 mt-1">Years Experience</div>
+            </div>
+            <div className="border-x border-white/30">
+              <div className="text-2xl md:text-4xl font-bold">30-Mile</div>
+              <div className="text-sm md:text-base font-medium text-white/90 mt-1">Service Radius</div>
+            </div>
+            <div>
+              <div className="text-2xl md:text-4xl font-bold">$75</div>
+              <div className="text-sm md:text-base font-medium text-white/90 mt-1">Flat Diagnostic</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="py-16 md:py-20 bg-gray-50">
+        <div className="max-w-6xl mx-auto px-4">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">
+            How It <span className="text-amber">Works</span>
           </h2>
-          <p className="text-lg text-white/90 max-w-2xl mx-auto">
-            We will find the problem, tell you the truth, and give you a fair
-            price to fix it. Servicing Carlisle, Sullivan, Vincennes, and
-            surrounding areas.
-          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              {
+                step: "1",
+                title: "Call or Book Online",
+                desc: "Give us a call at (812) 564-3719 or use our online scheduler. We'll get you on the calendar fast.",
+              },
+              {
+                step: "2",
+                title: "We Come to You",
+                desc: "We drive out to your home or business anywhere within 30 miles of Carlisle. No shop drop-off needed.",
+              },
+              {
+                step: "3",
+                title: "Fixed Right or You Don't Pay",
+                desc: "We diagnose it, tell you the truth, and fix it right. If we can't fix it, you don't owe us for the repair.",
+              },
+            ].map((item) => (
+              <div key={item.step} className="text-center">
+                <div className="w-16 h-16 bg-navy text-amber rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">
+                  {item.step}
+                </div>
+                <h3 className="text-xl font-bold mb-2">{item.title}</h3>
+                <p className="text-gray-600">{item.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -122,34 +185,29 @@ export default function Home() {
         </div>
       </section>
 
-      {/* About / Story */}
+      {/* Why Us */}
       <section className="bg-navy text-white py-16 md:py-20">
         <div className="max-w-4xl mx-auto px-4">
           <h2 className="text-2xl md:text-3xl font-bold mb-6">
-            45 Years of <span className="text-amber">Solving Problems.</span>
+            Why <span className="text-amber">Grease &amp; Threads?</span>
           </h2>
           <div className="text-gray-300 space-y-4 text-lg leading-relaxed">
             <p>
               I spent 30 years as a paramedic and 15 years in municipal water
-              treatment. In those jobs, you do not guess — you find the facts
+              treatment. In those jobs, you don&apos;t guess — you find the facts
               and fix the problem correctly the first time.
             </p>
             <p>
-              But I have always had grease on my hands. Outside of my career, I
-              have spent decades as a mechanic, doing full home remodels, and
-              serving as the jack of all trades for my neighbors and community.
+              But I&apos;ve always had grease on my hands. Decades as a mechanic,
+              full home remodels, the jack of all trades for my neighbors and
+              community. Whether it&apos;s a furnace that won&apos;t kick on or a fryer
+              down in a busy kitchen, I&apos;ve likely seen it and fixed it before.
             </p>
-            <p>
-              Whether it is a furnace that will not kick on, a washer that is
-              leaking, or a fryer down in a busy kitchen, I have likely seen it
-              and fixed it before. I am semi-retired now, but I still believe in
-              doing a job right.
-            </p>
-            <p className="text-amber font-semibold">
-              Most guys will try to sell you a whole new unit or a $500 control
-              board you do not need. I would rather fix what you have and earn
-              your trust.
-            </p>
+            <blockquote className="border-l-4 border-amber pl-6 mt-6">
+              <p className="text-white text-xl font-semibold italic">
+                &ldquo;Most guys would&apos;ve sold you a part. We don&apos;t. Right is right.&rdquo;
+              </p>
+            </blockquote>
           </div>
           <div className="mt-8">
             <Link
@@ -162,6 +220,28 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Testimonials */}
+      <section className="py-16 md:py-20 bg-gray-50">
+        <div className="max-w-6xl mx-auto px-4">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-4">
+            What Customers <span className="text-amber">Say</span>
+          </h2>
+          <p className="text-center text-gray-500 text-sm mb-10">⭐ Google Reviews — Carlisle, Indiana</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {testimonials.map((t) => (
+              <div key={t.name} className="bg-white rounded-xl p-6 shadow-md border border-gray-100">
+                <div className="text-amber text-xl mb-3">{"★".repeat(t.stars)}</div>
+                <p className="text-gray-700 italic mb-4">&ldquo;{t.text}&rdquo;</p>
+                <div>
+                  <p className="font-semibold text-navy text-sm">{t.name}</p>
+                  <p className="text-gray-400 text-xs">{t.location}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-16 md:py-20 text-center">
         <div className="max-w-4xl mx-auto px-4">
@@ -169,7 +249,7 @@ export default function Home() {
             Ready to Get It Fixed?
           </h2>
           <p className="text-gray-600 text-lg mb-8">
-            Call us or book online. We will take care of the rest.
+            Call us or book online. We&apos;ll take care of the rest.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
@@ -189,6 +269,31 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Sticky Mobile CTA */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-navy border-t border-white/20 flex">
+        <a
+          href="tel:8125643719"
+          className="flex-1 flex items-center justify-center gap-2 py-4 text-white font-bold text-sm bg-navy hover:bg-navy/90 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+          </svg>
+          Call Now
+        </a>
+        <div className="w-px bg-white/20" />
+        <a
+          href="https://calendar.app.google/NEBSdUFjbUY7yPxF6"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 flex items-center justify-center gap-2 py-4 text-navy font-bold text-sm bg-amber hover:bg-amber-dark transition-colors"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+          </svg>
+          Book Online
+        </a>
+      </div>
     </main>
   );
 }
