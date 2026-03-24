@@ -27,14 +27,15 @@ export async function PUT(
   const db = getDb();
 
   const fields: string[] = [];
-  const args: unknown[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const args: any[] = [];
 
-  if (body.status !== undefined) { fields.push("status = ?"); args.push(body.status); }
-  if (body.revision_notes !== undefined) { fields.push("revision_notes = ?"); args.push(body.revision_notes); }
-  if (body.scheduled_at !== undefined) { fields.push("scheduled_at = ?"); args.push(body.scheduled_at); }
-  if (body.generated_content !== undefined) { fields.push("generated_content = ?"); args.push(body.generated_content); }
-  if (body.fb_post_id !== undefined) { fields.push("fb_post_id = ?"); args.push(body.fb_post_id); }
-  if (body.fb_post_url !== undefined) { fields.push("fb_post_url = ?"); args.push(body.fb_post_url); }
+  if (body.status !== undefined) { fields.push("status = ?"); args.push(String(body.status)); }
+  if (body.revision_notes !== undefined) { fields.push("revision_notes = ?"); args.push(body.revision_notes ?? null); }
+  if (body.scheduled_at !== undefined) { fields.push("scheduled_at = ?"); args.push(body.scheduled_at ?? null); }
+  if (body.generated_content !== undefined) { fields.push("generated_content = ?"); args.push(body.generated_content ?? null); }
+  if (body.fb_post_id !== undefined) { fields.push("fb_post_id = ?"); args.push(body.fb_post_id ?? null); }
+  if (body.fb_post_url !== undefined) { fields.push("fb_post_url = ?"); args.push(body.fb_post_url ?? null); }
   if (body.status === "Posted") { fields.push("posted_at = datetime('now')"); }
 
   fields.push("updated_at = datetime('now')");
