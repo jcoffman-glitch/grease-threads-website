@@ -15,6 +15,38 @@ async function auth() {
   return null;
 }
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const denied = await auth();
+  if (denied) return denied;
+
+  const { id } = await params;
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT id, google_id, email, name, phone, address, city, preferred_contact, created_at FROM customers WHERE id = ?",
+    args: [id],
+  });
+
+  if (!result.rows.length) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const row = result.rows[0];
+  return Response.json({
+    id: row.id,
+    google_id: row.google_id,
+    email: row.email,
+    name: row.name,
+    phone: row.phone,
+    address: row.address,
+    city: row.city,
+    preferred_contact: row.preferred_contact,
+    created_at: row.created_at,
+  });
+}
+
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }

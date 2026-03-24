@@ -1,5 +1,7 @@
-export type JobStatus = "Lead" | "Called" | "Scheduled" | "In Progress" | "Completed" | "Invoiced" | "Paid";
+export type JobStatus = "New" | "Scheduled" | "En Route" | "On Scene" | "Complete" | "Invoiced" | "Paid" | "Lead" | "Called" | "In Progress" | "Completed";
 export type ServiceType = "HVAC" | "Appliance Repair" | "Commercial Kitchen" | "Handyman" | "Other";
+export type EquipmentType = "HVAC" | "Appliance" | "Commercial Kitchen" | "Handyman" | "Warranty";
+export type UserRole = "admin" | "technician" | "it" | "customer";
 
 export interface Job {
   id: string;
@@ -18,10 +20,47 @@ export interface Job {
   googleReviewSent: boolean;
   sheetsSynced: boolean;
   leadSource?: string;
+  // v2 fields
+  equipmentType?: EquipmentType | string;
+  modelNumber?: string;
+  aiSuggestions?: string;     // cached JSON from AI diagnostic
+  warrantyFlag?: boolean;
+  subscriptionFlag?: boolean;
+  warrantyAuthNumber?: string;
+  warrantyContact?: string;
+  warrantyCovered?: string;   // 'covered' | 'not_covered' | ''
+  warrantyReimbursement?: number;
+  assignedTo?: string;        // 'joe' | 'anthoney'
+  followUpRequired?: boolean;
   // Legacy fields for backward compatibility
   date?: string;
   phone?: string;
   amount?: number;
+}
+
+export interface Subscription {
+  id: string;
+  customerId: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  planType: "residential" | "commercial";
+  recurrence: string;         // JSON: { type, value }
+  startDate: string;
+  nextDue: string;
+  status: "active" | "paused" | "cancelled";
+  notes?: string;
+  createdAt: string;
+}
+
+export interface NotificationLog {
+  id: string;
+  jobId?: string;
+  recipient: "joe" | "anthoney" | "customer";
+  type: "toast" | "email";
+  event: string;
+  sentAt: string;
+  status: "sent" | "failed";
 }
 
 export interface JobItem {

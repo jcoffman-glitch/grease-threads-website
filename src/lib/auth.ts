@@ -92,11 +92,14 @@ export const authOptions: AuthOptions = {
     },
     async jwt({ token, user, account }) {
       if (user) {
+        const ryanEmail = process.env.RYAN_EMAIL || "ryan@greasethreads.com";
         if (!user.email) {
           // Credentials login → admin
           token.role = "admin";
         } else if (user.email === "anthoney@greasethreads.com") {
           token.role = "technician";
+        } else if (user.email === ryanEmail) {
+          token.role = "it";
         } else if (user.email.endsWith("@greasethreads.com")) {
           token.role = "admin";
         } else {

@@ -3,6 +3,10 @@
     {
       "path": "/api/admin/social/publish",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/admin/subscriptions/cron",
+      "schedule": "0 8 * * *"
     }
   ]
 }

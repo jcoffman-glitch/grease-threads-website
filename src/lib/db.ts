@@ -5,7 +5,7 @@
 
 import { createClient } from "@libsql/client/http";
 import { randomUUID } from "crypto";
-import type { Job, JobItem, InventoryItem, Invoice, PriceListItem } from "./types";
+import type { Job, JobItem, InventoryItem, Invoice, PriceListItem, Subscription, NotificationLog } from "./types";
 
 const client = createClient({
   url: process.env.TURSO_DATABASE_URL!,
@@ -80,7 +80,44 @@ export async function ensureSchema(): Promise<void> {
       default_price REAL,
       item_type TEXT
     );
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      customer_id TEXT,
+      plan_type TEXT,
+      recurrence TEXT,
+      start_date TEXT,
+      next_due TEXT,
+      status TEXT DEFAULT 'active',
+      notes TEXT,
+      created_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS notifications_log (
+      id TEXT PRIMARY KEY,
+      job_id TEXT,
+      recipient TEXT,
+      type TEXT,
+      event TEXT,
+      sent_at TEXT,
+      status TEXT DEFAULT 'sent'
+    );
   `);
+  // v2 schema migrations — add columns if missing
+  const v2Migrations = [
+    "ALTER TABLE jobs ADD COLUMN equipment_type TEXT",
+    "ALTER TABLE jobs ADD COLUMN model_number TEXT",
+    "ALTER TABLE jobs ADD COLUMN ai_suggestions TEXT",
+    "ALTER TABLE jobs ADD COLUMN warranty_flag INTEGER DEFAULT 0",
+    "ALTER TABLE jobs ADD COLUMN subscription_flag INTEGER DEFAULT 0",
+    "ALTER TABLE jobs ADD COLUMN warranty_auth_number TEXT",
+    "ALTER TABLE jobs ADD COLUMN warranty_contact TEXT",
+    "ALTER TABLE jobs ADD COLUMN warranty_covered TEXT",
+    "ALTER TABLE jobs ADD COLUMN warranty_reimbursement REAL",
+    "ALTER TABLE jobs ADD COLUMN assigned_to TEXT",
+    "ALTER TABLE jobs ADD COLUMN follow_up_required INTEGER DEFAULT 0",
+  ];
+  for (const sql of v2Migrations) {
+    try { await client.execute(sql); } catch { /* column already exists */ }
+  }
   schemaEnsured = true;
 }
 
@@ -108,6 +145,18 @@ function rowToJob(r: any): Job {
     date: r.created_at?.split("T")[0],
     phone: r.customer_phone,
     amount: 0,
+    // v2 fields
+    equipmentType: r.equipment_type || undefined,
+    modelNumber: r.model_number || undefined,
+    aiSuggestions: r.ai_suggestions || undefined,
+    warrantyFlag: !!r.warranty_flag,
+    subscriptionFlag: !!r.subscription_flag,
+    warrantyAuthNumber: r.warranty_auth_number || undefined,
+    warrantyContact: r.warranty_contact || undefined,
+    warrantyCovered: r.warranty_covered || undefined,
+    warrantyReimbursement: r.warranty_reimbursement || undefined,
+    assignedTo: r.assigned_to || undefined,
+    followUpRequired: !!r.follow_up_required,
   };
 }
 
@@ -241,7 +290,7 @@ export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job |
   if (!existing.rows.length) return null;
   const cur = rowToJob(existing.rows[0]);
   await client.execute({
-    sql: `UPDATE jobs SET customer_name=?, customer_phone=?, customer_email=?, service_type=?, problem_description=?, address=?, scheduled_at=?, status=?, notes=?, google_review_sent=?, sheets_synced=?, lead_source=? WHERE id=?`,
+    sql: `UPDATE jobs SET customer_name=?, customer_phone=?, customer_email=?, service_type=?, problem_description=?, address=?, scheduled_at=?, status=?, notes=?, google_review_sent=?, sheets_synced=?, lead_source=?, equipment_type=?, model_number=?, ai_suggestions=?, warranty_flag=?, subscription_flag=?, warranty_auth_number=?, warranty_contact=?, warranty_covered=?, warranty_reimbursement=?, assigned_to=?, follow_up_required=? WHERE id=?`,
     args: [
       data.customerName ?? cur.customerName,
       data.customerPhone ?? cur.customerPhone,
@@ -255,6 +304,17 @@ export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job |
       data.googleReviewSent !== undefined ? (data.googleReviewSent ? 1 : 0) : (cur.googleReviewSent ? 1 : 0),
       data.sheetsSynced !== undefined ? (data.sheetsSynced ? 1 : 0) : (cur.sheetsSynced ? 1 : 0),
       data.leadSource ?? cur.leadSource ?? "direct",
+      data.equipmentType ?? cur.equipmentType ?? null,
+      data.modelNumber ?? cur.modelNumber ?? null,
+      data.aiSuggestions ?? cur.aiSuggestions ?? null,
+      data.warrantyFlag !== undefined ? (data.warrantyFlag ? 1 : 0) : (cur.warrantyFlag ? 1 : 0),
+      data.subscriptionFlag !== undefined ? (data.subscriptionFlag ? 1 : 0) : (cur.subscriptionFlag ? 1 : 0),
+      data.warrantyAuthNumber ?? cur.warrantyAuthNumber ?? null,
+      data.warrantyContact ?? cur.warrantyContact ?? null,
+      data.warrantyCovered ?? cur.warrantyCovered ?? null,
+      data.warrantyReimbursement ?? cur.warrantyReimbursement ?? null,
+      data.assignedTo ?? cur.assignedTo ?? null,
+      data.followUpRequired !== undefined ? (data.followUpRequired ? 1 : 0) : (cur.followUpRequired ? 1 : 0),
       id,
     ],
   });
@@ -494,4 +554,83 @@ export async function dbUpdatePriceListItem(id: string, data: Partial<PriceListI
 export async function dbDeletePriceListItem(id: string): Promise<void> {
   await ensureSchema();
   await client.execute({ sql: "DELETE FROM price_list WHERE id = ?", args: [id] });
+}
+
+// ── Subscriptions ───────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToSubscription(r: any): Subscription {
+  return {
+    id: r.id,
+    customerId: r.customer_id,
+    planType: r.plan_type,
+    recurrence: r.recurrence,
+    startDate: r.start_date,
+    nextDue: r.next_due,
+    status: r.status,
+    notes: r.notes,
+    createdAt: r.created_at,
+  };
+}
+
+export async function dbGetSubscriptions(): Promise<Subscription[]> {
+  await ensureSchema();
+  const res = await client.execute("SELECT * FROM subscriptions ORDER BY next_due ASC");
+  return res.rows.map(rowToSubscription);
+}
+
+export async function dbGetSubscriptionsByCustomer(customerId: string): Promise<Subscription[]> {
+  await ensureSchema();
+  const res = await client.execute({ sql: "SELECT * FROM subscriptions WHERE customer_id = ?", args: [customerId] });
+  return res.rows.map(rowToSubscription);
+}
+
+export async function dbCreateSubscription(data: Partial<Subscription>): Promise<Subscription> {
+  await ensureSchema();
+  const id = randomUUID();
+  const createdAt = new Date().toISOString();
+  await client.execute({
+    sql: `INSERT INTO subscriptions (id, customer_id, plan_type, recurrence, start_date, next_due, status, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, data.customerId || "", data.planType || "residential", data.recurrence || "{}", data.startDate || createdAt, data.nextDue || data.startDate || createdAt, data.status || "active", data.notes || null, createdAt],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM subscriptions WHERE id = ?", args: [id] });
+  return rowToSubscription(row.rows[0]);
+}
+
+export async function dbUpdateSubscription(id: string, data: Partial<Subscription>): Promise<Subscription | null> {
+  await ensureSchema();
+  const existing = await client.execute({ sql: "SELECT * FROM subscriptions WHERE id = ?", args: [id] });
+  if (!existing.rows.length) return null;
+  const cur = rowToSubscription(existing.rows[0]);
+  await client.execute({
+    sql: `UPDATE subscriptions SET plan_type=?, recurrence=?, start_date=?, next_due=?, status=?, notes=? WHERE id=?`,
+    args: [data.planType ?? cur.planType, data.recurrence ?? cur.recurrence, data.startDate ?? cur.startDate, data.nextDue ?? cur.nextDue, data.status ?? cur.status, data.notes ?? cur.notes ?? null, id],
+  });
+  const row = await client.execute({ sql: "SELECT * FROM subscriptions WHERE id = ?", args: [id] });
+  return rowToSubscription(row.rows[0]);
+}
+
+export async function dbDeleteSubscription(id: string): Promise<void> {
+  await ensureSchema();
+  await client.execute({ sql: "DELETE FROM subscriptions WHERE id = ?", args: [id] });
+}
+
+// ── Notifications Log ──────────────────────────────────────────────────────
+
+export async function dbLogNotification(data: Partial<NotificationLog>): Promise<void> {
+  await ensureSchema();
+  const id = randomUUID();
+  await client.execute({
+    sql: `INSERT INTO notifications_log (id, job_id, recipient, type, event, sent_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, data.jobId || null, data.recipient || "joe", data.type || "toast", data.event || "", new Date().toISOString(), data.status || "sent"],
+  });
+}
+
+// ── Get single job by ID ──────────────────────────────────────────────────
+
+export async function dbGetJob(id: string): Promise<Job | null> {
+  await ensureSchema();
+  const res = await client.execute({ sql: "SELECT * FROM jobs WHERE id = ?", args: [id] });
+  if (!res.rows.length) return null;
+  return rowToJob(res.rows[0]);
 }

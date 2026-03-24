@@ -6,14 +6,17 @@ import { signOut, useSession } from "next-auth/react";
 import { SessionProvider } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { Toaster } from "react-hot-toast";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: "🏠" },
   { href: "/admin/jobs", label: "Jobs", icon: "🔧" },
+  { href: "/admin/schedule", label: "Schedule", icon: "📅" },
   { href: "/admin/invoices", label: "Invoices", icon: "💰" },
   { href: "/admin/inventory", label: "Inventory", icon: "📦" },
   { href: "/admin/price-list", label: "Price List", icon: "🏷️" },
   { href: "/admin/service-log", label: "Service Log", icon: "📋" },
+  { href: "/admin/warranty", label: "Warranty", icon: "🛡️", adminOnly: true },
   { href: "/admin/social", label: "Social", icon: "📱", adminOnly: true },
   { href: "/admin/marketing", label: "Marketing", icon: "📣", adminOnly: true },
   { href: "/admin/reports", label: "Reports", icon: "📊", adminOnly: true },
@@ -24,6 +27,7 @@ const navItems = [
 const bottomNavItems = [
   { href: "/admin", label: "Dashboard", icon: "🏠" },
   { href: "/admin/jobs", label: "Jobs", icon: "📋" },
+  { href: "/admin/schedule", label: "Schedule", icon: "📅" },
   { href: "/admin/invoices", label: "Invoices", icon: "🧾" },
 ];
 
@@ -42,7 +46,7 @@ function InstallBanner() {
 
   return (
     <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-sm md:hidden">
-      <span className="text-amber-800">📱 Install this app: tap Share → Add to Home Screen</span>
+      <span className="text-amber-800">Install this app: tap Share then Add to Home Screen</span>
       <button
         onClick={() => {
           localStorage.setItem("pwa-install-dismissed", "1");
@@ -71,7 +75,7 @@ function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 px-4 py-2 text-xs ${
+              className={`flex flex-col items-center gap-1 px-3 py-2 text-xs ${
                 active ? "text-amber-500" : "text-gray-500"
               }`}
             >
@@ -83,10 +87,10 @@ function BottomNav() {
         {/* Center + New Job button */}
         <button
           onClick={() => router.push("/admin/jobs?new=1")}
-          className="flex flex-col items-center gap-1 px-4 py-2 text-xs text-white"
+          className="flex flex-col items-center gap-1 px-3 py-2 text-xs text-white"
         >
           <span className="bg-amber-500 rounded-full w-12 h-12 flex items-center justify-center text-2xl shadow-lg">
-            ➕
+            +
           </span>
         </button>
       </div>
@@ -112,6 +116,7 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-gray-100">
       <ServiceWorkerRegistration />
+      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-30 md:hidden"
@@ -126,7 +131,9 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       >
         <div className="p-4 border-b border-navy-light">
           <h1 className="text-lg font-bold text-amber">Grease &amp; Threads</h1>
-          <p className="text-xs text-gray-400">{isTech ? "Tech Panel" : "Admin Panel"}</p>
+          <p className="text-xs text-gray-400">
+            {role === "it" ? "IT/Dev Panel" : isTech ? "Tech Panel" : "Admin Panel"}
+          </p>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {filteredNavItems.map((item) => {

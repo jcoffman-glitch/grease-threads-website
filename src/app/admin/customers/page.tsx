@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface Customer {
   id: string;
@@ -129,8 +130,8 @@ export default function CustomersPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-navy">{c.name || "—"}</td>
+                  <tr key={c.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => window.location.href = `/admin/customers/${c.id}`}>
+                    <td className="px-4 py-3 font-semibold text-navy"><Link href={`/admin/customers/${c.id}`} className="hover:underline">{c.name || "—"}</Link></td>
                     <td className="px-4 py-3 text-gray-600">{c.email || "—"}</td>
                     <td className="px-4 py-3 text-gray-600">{c.phone || "—"}</td>
                     <td className="px-4 py-3 text-gray-600">{c.city || "—"}</td>
@@ -154,7 +155,7 @@ export default function CustomersPage() {
           {/* Mobile cards */}
           <div className="md:hidden space-y-3">
             {filtered.map((c) => (
-              <div key={c.id} className="bg-white rounded-xl border border-gray-200 p-4">
+              <Link key={c.id} href={`/admin/customers/${c.id}`} className="block bg-white rounded-xl border border-gray-200 p-4 active:bg-gray-50">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-semibold text-navy">{c.name || "—"}</p>
@@ -176,7 +177,7 @@ export default function CustomersPage() {
                   <ContactBadge method={c.preferred_contact} />
                   <span className="text-xs text-gray-400">Joined {formatDate(c.created_at)}</span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </>
