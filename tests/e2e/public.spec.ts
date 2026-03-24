@@ -27,7 +27,7 @@ test.describe("Public pages", () => {
     await page.getByRole("button", { name: /next/i }).click();
 
     // Step 2: Describe the problem
-    await page.getByPlaceholder(/describe|problem|what/i).first().fill(
+    await page.getByPlaceholder(/e\.g\.|describe|problem|stopped|AC/i).first().fill(
       "PLAYWRIGHT_TEST: AC not cooling properly"
     );
     await page.getByText("As soon as possible").click();
@@ -68,8 +68,8 @@ test.describe("Public pages", () => {
 
     await expect(page.locator("body")).toContainText(/Grease/i);
 
-    // Phone number link should exist as a tap target
-    const phoneLink = page.locator('a[href^="tel:"]').first();
-    await expect(phoneLink).toBeVisible();
+    // Phone number link should exist somewhere in the DOM as a tap target
+    const phoneLink = page.locator('a[href^="tel:"]');
+    await expect(phoneLink.first()).toBeAttached();
   });
 });

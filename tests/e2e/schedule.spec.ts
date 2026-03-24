@@ -25,7 +25,7 @@ test.describe("Schedule page", () => {
     await page.waitForLoadState("networkidle");
 
     // Page should render content — either jobs or an empty state
-    await expect(page.locator("main, [role='main'], body")).not.toBeEmpty();
+    await expect(page.locator("main").first()).not.toBeEmpty();
     await context.close();
   });
 });
