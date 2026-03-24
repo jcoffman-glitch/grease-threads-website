@@ -109,7 +109,7 @@ export default function AboutPage() {
             Meet the <span className="text-amber">Team</span>
           </h2>
           <p className="text-gray-600 text-center mb-12 max-w-2xl mx-auto">
-            The people behind every repair, every call, and every system we build.
+            Family owned and operated — Joe, his son Ryan, and his brother-in-law Anthoney. Three people who take pride in doing it right.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Joe Coffman */}
@@ -155,20 +155,27 @@ export default function AboutPage() {
               </p>
             </div>
 
-            {/* Coffman */}
+            {/* Ryan Coffman */}
             <div className="bg-white rounded-lg p-6 shadow-sm hover:shadow-lg transition-shadow">
               <div className="w-20 h-20 bg-navy rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-amber">C</span>
+                <span className="text-2xl font-bold text-amber">RC</span>
               </div>
-              <h3 className="text-xl font-bold text-center mb-1">Coffman</h3>
+              <h3 className="text-xl font-bold text-center mb-1">Ryan Coffman</h3>
               <p className="text-amber font-semibold text-sm text-center mb-4">
                 Head of IT &amp; Systems
               </p>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Coffman manages all digital infrastructure for Grease &amp;
-                Threads — the website, job tracking, backend systems, and data
-                pipelines. As the business grows into building automation and
-                control systems, he will be the one building them.
+                Ryan is Joe&apos;s son and the third leg of this family operation.
+                He brought 20 years in EMS and 15 years as a firefighter to
+                everything he does — if you have worked emergency services, you
+                know how to stay calm under pressure, think fast, and get things
+                done right the first time. Ryan applies that same mindset to the
+                tech side of Grease &amp; Threads. He built and maintains
+                everything digital: the website, job tracking system, backend
+                pipelines, and automation tools that keep the business running
+                smoothly behind the scenes. When he is not keeping the lights on
+                digitally, he is a self-described nerd — and that is exactly
+                the kind of person you want building your infrastructure.
               </p>
             </div>
           </div>
