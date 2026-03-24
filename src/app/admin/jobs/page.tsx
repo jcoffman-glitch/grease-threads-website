@@ -121,7 +121,11 @@ export default function JobsPage() {
   }
 
   const filtered = jobs
-    .filter((j) => filter === "All" || mapStatus(j.status) === filter)
+    .filter((j) => {
+      if (filter === "All") return true;
+      if (filter === "Warranty") return j.warrantyFlag;
+      return mapStatus(j.status) === filter;
+    })
     .sort((a, b) => new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime());
 
   async function createJob(e: React.FormEvent) {
@@ -160,8 +164,8 @@ export default function JobsPage() {
 
       {/* Status filter pills */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-        {["All", ...V3_STATUSES].map((s) => {
-          const count = s === "All" ? jobs.length : jobs.filter((j) => mapStatus(j.status) === s).length;
+        {["All", ...V3_STATUSES, "Warranty"].map((s) => {
+          const count = s === "All" ? jobs.length : s === "Warranty" ? jobs.filter((j) => j.warrantyFlag).length : jobs.filter((j) => mapStatus(j.status) === s).length;
           return (
             <button
               key={s}
@@ -200,6 +204,7 @@ export default function JobsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-navy text-sm truncate">{job.customerName}</span>
+                      {job.warrantyFlag && <span className="text-xs flex-shrink-0" title="Warranty Job">🛡️</span>}
                       {job.jobNumber && <span className="text-xs text-gray-400 flex-shrink-0">#{job.jobNumber}</span>}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5 truncate">

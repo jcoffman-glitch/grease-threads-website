@@ -67,6 +67,7 @@ export default function WorkOrderPage() {
   const [newItem, setNewItem] = useState({ description: "", quantity: 1, unitPrice: 0, itemType: "Labor" });
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [warrantyOpen, setWarrantyOpen] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [priceSearch, setPriceSearch] = useState("");
   const [includeTax, setIncludeTax] = useState(false);
@@ -640,45 +641,93 @@ export default function WorkOrderPage() {
         )}
       </div>
 
-      {/* 7. Warranty fields (only when flag checked) */}
+      {/* 7. Rely Home Warranty Panel (only when flag checked) */}
       {job.warrantyFlag && (
-        <div className="bg-white rounded-xl shadow-sm border-2 border-purple-200 p-4 mb-3">
-          <h2 className="font-bold text-purple-700 text-sm uppercase tracking-wide mb-3">Warranty Details</h2>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Authorization Number</label>
-              <input value={job.warrantyAuthNumber || ""}
-                onChange={e => autoSave({ warrantyAuthNumber: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2.5 text-sm" placeholder="Auth #" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Warranty Company Contact</label>
-              <input value={job.warrantyContact || ""}
-                onChange={e => autoSave({ warrantyContact: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2.5 text-sm" placeholder="Contact info" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Coverage</label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="warranty" value="covered" checked={job.warrantyCovered === "covered"}
-                    onChange={e => autoSave({ warrantyCovered: e.target.value })} className="accent-amber" />
-                  <span className="text-sm">Covered</span>
+        <div className="bg-white rounded-xl shadow-sm border-2 border-purple-200 overflow-hidden mb-3">
+          <button
+            onClick={() => setWarrantyOpen(!warrantyOpen)}
+            className="w-full px-4 py-3 flex items-center justify-between active:bg-purple-50"
+          >
+            <span className="font-bold text-purple-700 text-sm uppercase tracking-wide flex items-center gap-2">
+              <span>🛡️</span> Rely Home Warranty
+            </span>
+            <span className="text-gray-400 text-lg">{warrantyOpen ? "▲" : "▼"}</span>
+          </button>
+          {warrantyOpen && (
+            <div className="px-4 pb-4 border-t border-purple-100 space-y-3 pt-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Rely Work Order #</label>
+                <input value={job.warrantyWorkOrderNumber || ""}
+                  onChange={e => autoSave({ warrantyWorkOrderNumber: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm" placeholder="Rely dispatch ID" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Authorization Status</label>
+                <select value={job.warrantyAuthStatus || ""}
+                  onChange={e => autoSave({ warrantyAuthStatus: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm">
+                  <option value="">Select status</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="denied">Denied</option>
+                  <option value="reassigned">Re-assigned</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Authorization #</label>
+                <input value={job.warrantyAuthNumber || ""}
+                  onChange={e => autoSave({ warrantyAuthNumber: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm" placeholder="Auth #" />
+                <p className="text-xs text-amber-600 mt-1 font-medium">Save this before doing the work</p>
+              </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 py-1 cursor-pointer">
+                  <input type="checkbox" checked={job.deductibleCollected || false}
+                    onChange={e => autoSave({ deductibleCollected: e.target.checked })}
+                    className="w-5 h-5 accent-purple-600" />
+                  <span className="text-sm text-gray-700">Deductible Collected</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="warranty" value="not_covered" checked={job.warrantyCovered === "not_covered"}
-                    onChange={e => autoSave({ warrantyCovered: e.target.value })} className="accent-amber" />
-                  <span className="text-sm">Not Covered</span>
-                </label>
+                {job.deductibleCollected && (
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">Deductible Amount</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-gray-400 text-sm">$</span>
+                      <input type="number" min="0" step="0.01" value={job.deductibleAmount || ""}
+                        onChange={e => autoSave({ deductibleAmount: parseFloat(e.target.value) || 0 })}
+                        className="w-full border rounded-lg pl-7 pr-3 py-2.5 text-sm" placeholder="0.00" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Billing Entity</label>
+                <input value={job.warrantyBillingEntity ?? "Rely Home Warranty"}
+                  onChange={e => autoSave({ warrantyBillingEntity: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Rely Invoice Status</label>
+                <select value={job.warrantyInvoiceStatus || "not_submitted"}
+                  onChange={e => autoSave({ warrantyInvoiceStatus: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm">
+                  <option value="not_submitted">Not Submitted</option>
+                  <option value="submitted">Submitted</option>
+                  <option value="approved">Approved</option>
+                  <option value="paid">Paid</option>
+                  <option value="disputed">Disputed</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Rely Reimbursement Amount</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" step="0.01" value={job.warrantyReimbursement || ""}
+                    onChange={e => autoSave({ warrantyReimbursement: parseFloat(e.target.value) || 0 })}
+                    className="w-full border rounded-lg pl-7 pr-3 py-2.5 text-sm" placeholder="0.00" />
+                </div>
               </div>
             </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Reimbursement Amount</label>
-              <input type="number" min="0" step="0.01" value={job.warrantyReimbursement || ""}
-                onChange={e => autoSave({ warrantyReimbursement: parseFloat(e.target.value) || 0 })}
-                className="w-full border rounded-lg px-3 py-2.5 text-sm" placeholder="$0.00" />
-            </div>
-          </div>
+          )}
         </div>
       )}
 

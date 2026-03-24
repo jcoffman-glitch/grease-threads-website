@@ -119,6 +119,12 @@ export async function ensureSchema(): Promise<void> {
     "ALTER TABLE jobs ADD COLUMN warranty_reimbursement REAL",
     "ALTER TABLE jobs ADD COLUMN assigned_to TEXT",
     "ALTER TABLE jobs ADD COLUMN follow_up_required INTEGER DEFAULT 0",
+    "ALTER TABLE jobs ADD COLUMN warranty_work_order_number TEXT",
+    "ALTER TABLE jobs ADD COLUMN warranty_auth_status TEXT",
+    "ALTER TABLE jobs ADD COLUMN warranty_billing_entity TEXT DEFAULT 'Rely Home Warranty'",
+    "ALTER TABLE jobs ADD COLUMN warranty_invoice_status TEXT DEFAULT 'not_submitted'",
+    "ALTER TABLE jobs ADD COLUMN deductible_collected INTEGER DEFAULT 0",
+    "ALTER TABLE jobs ADD COLUMN deductible_amount REAL",
     "ALTER TABLE customers ADD COLUMN notes TEXT",
     "ALTER TABLE customers ADD COLUMN preferred_contact TEXT",
   ];
@@ -162,6 +168,12 @@ function rowToJob(r: any): Job {
     warrantyContact: r.warranty_contact || undefined,
     warrantyCovered: r.warranty_covered || undefined,
     warrantyReimbursement: r.warranty_reimbursement || undefined,
+    warrantyWorkOrderNumber: r.warranty_work_order_number || undefined,
+    warrantyAuthStatus: r.warranty_auth_status || undefined,
+    warrantyBillingEntity: r.warranty_billing_entity || undefined,
+    warrantyInvoiceStatus: r.warranty_invoice_status || undefined,
+    deductibleCollected: !!r.deductible_collected,
+    deductibleAmount: r.deductible_amount || undefined,
     assignedTo: r.assigned_to || undefined,
     followUpRequired: !!r.follow_up_required,
   };
@@ -353,7 +365,7 @@ export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job |
   if (!existing.rows.length) return null;
   const cur = rowToJob(existing.rows[0]);
   await client.execute({
-    sql: `UPDATE jobs SET customer_name=?, customer_phone=?, customer_email=?, service_type=?, problem_description=?, address=?, scheduled_at=?, status=?, notes=?, google_review_sent=?, sheets_synced=?, lead_source=?, equipment_type=?, model_number=?, ai_suggestions=?, warranty_flag=?, subscription_flag=?, warranty_auth_number=?, warranty_contact=?, warranty_covered=?, warranty_reimbursement=?, assigned_to=?, follow_up_required=? WHERE id=?`,
+    sql: `UPDATE jobs SET customer_name=?, customer_phone=?, customer_email=?, service_type=?, problem_description=?, address=?, scheduled_at=?, status=?, notes=?, google_review_sent=?, sheets_synced=?, lead_source=?, equipment_type=?, model_number=?, ai_suggestions=?, warranty_flag=?, subscription_flag=?, warranty_auth_number=?, warranty_contact=?, warranty_covered=?, warranty_reimbursement=?, assigned_to=?, follow_up_required=?, warranty_work_order_number=?, warranty_auth_status=?, warranty_billing_entity=?, warranty_invoice_status=?, deductible_collected=?, deductible_amount=? WHERE id=?`,
     args: [
       data.customerName ?? cur.customerName,
       data.customerPhone ?? cur.customerPhone,
@@ -378,6 +390,12 @@ export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job |
       data.warrantyReimbursement ?? cur.warrantyReimbursement ?? null,
       data.assignedTo ?? cur.assignedTo ?? null,
       data.followUpRequired !== undefined ? (data.followUpRequired ? 1 : 0) : (cur.followUpRequired ? 1 : 0),
+      data.warrantyWorkOrderNumber ?? cur.warrantyWorkOrderNumber ?? null,
+      data.warrantyAuthStatus ?? cur.warrantyAuthStatus ?? null,
+      data.warrantyBillingEntity ?? cur.warrantyBillingEntity ?? null,
+      data.warrantyInvoiceStatus ?? cur.warrantyInvoiceStatus ?? null,
+      data.deductibleCollected !== undefined ? (data.deductibleCollected ? 1 : 0) : (cur.deductibleCollected ? 1 : 0),
+      data.deductibleAmount ?? cur.deductibleAmount ?? null,
       id,
     ],
   });

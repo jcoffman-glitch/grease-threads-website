@@ -48,6 +48,12 @@ export interface Job {
   warrantyContact?: string;
   warrantyCovered?: string;   // 'covered' | 'not_covered' | ''
   warrantyReimbursement?: number;
+  warrantyWorkOrderNumber?: string;
+  warrantyAuthStatus?: string;  // 'pending' | 'approved' | 'denied' | 'reassigned'
+  warrantyBillingEntity?: string;
+  warrantyInvoiceStatus?: string; // 'not_submitted' | 'submitted' | 'approved' | 'paid' | 'disputed'
+  deductibleCollected?: boolean;
+  deductibleAmount?: number;
   assignedTo?: string;        // 'joe' | 'anthoney'
   followUpRequired?: boolean;
   // Legacy fields for backward compatibility

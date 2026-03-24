@@ -31,11 +31,15 @@ async function notifyNewLead(job: Job) {
   }).catch(() => {});
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const denied = await auth();
     if (denied) return denied;
-    const jobs = await dbGetJobs();
+    const url = new URL(request.url);
+    let jobs = await dbGetJobs();
+    if (url.searchParams.get("warranty") === "true") {
+      jobs = jobs.filter((j) => j.warrantyFlag);
+    }
     return Response.json(jobs);
   } catch (e) {
     console.error("GET /api/admin/jobs error:", e);
