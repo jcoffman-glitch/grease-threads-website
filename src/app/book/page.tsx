@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -20,6 +20,15 @@ const TIMING_OPTIONS = [
   { id: "Flexible", label: "I'm flexible — just call me" },
 ];
 
+interface Profile {
+  name: string;
+  email: string;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  preferred_contact: string;
+}
+
 export default function BookPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -28,34 +37,65 @@ export default function BookPage() {
   const [submitted, setSubmitted] = useState(false);
   const [trackingToken, setTrackingToken] = useState("");
   const [error, setError] = useState("");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  // If signed in with phone, contact step can be collapsed
+  const [contactExpanded, setContactExpanded] = useState(false);
 
   const [form, setForm] = useState({
     serviceType: "",
     problemDescription: "",
     address: "",
-    firstName: (session?.user?.name?.split(" ")[0]) || "",
-    lastName: (session?.user?.name?.split(" ").slice(1).join(" ")) || "",
+    firstName: "",
+    lastName: "",
     phone: "",
-    email: session?.user?.email || "",
+    email: "",
     preferredTiming: "",
   });
 
-  // Update firstName/lastName from session when it loads
-  const firstName = session?.user?.name?.split(" ")[0] || form.firstName;
-  const lastName = session?.user?.name?.split(" ").slice(1).join(" ") || form.lastName;
+  // Load profile on mount when signed in
+  useEffect(() => {
+    if (session?.user) {
+      // Pre-fill name/email from session
+      const nameParts = session.user.name?.split(" ") || [];
+      setForm((f) => ({
+        ...f,
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
+        email: session.user.email || "",
+      }));
 
-  const totalSteps = session ? 3 : 4;
+      fetch("/api/customer/profile")
+        .then((r) => r.json())
+        .then((data: Profile) => {
+          setProfile(data);
+          if (data.phone) {
+            setForm((f) => ({
+              ...f,
+              phone: data.phone || "",
+              address: f.address || data.address || "",
+            }));
+          }
+          setProfileLoaded(true);
+        })
+        .catch(() => setProfileLoaded(true));
+    } else {
+      setProfileLoaded(true);
+    }
+  }, [session]);
 
-  function getStepNumber() {
-    // If signed in, step 3 (contact) is skipped
-    if (session && step >= 3) return step + 1;
-    return step;
-  }
+  // Whether signed-in user has phone on file (skip contact step)
+  const hasProfilePhone = session && profileLoaded && profile?.phone;
+  // Whether to show contact step (step 3 in the flow)
+  // Show contact step if: not signed in, OR signed in but no phone, OR user chose to expand
+  const showContactStep = !session || !hasProfilePhone || contactExpanded;
 
   function set(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  // Actual steps in flow: 1, 2, [3 if needed], 4
+  // We store step as 1/2/3/4 where 3 = contact, 4 = review
   function canAdvance() {
     if (step === 1) return !!form.serviceType;
     if (step === 2) return !!form.problemDescription && !!form.address;
@@ -64,8 +104,7 @@ export default function BookPage() {
   }
 
   function nextStep() {
-    if (session && step === 2) {
-      // Skip contact step if signed in
+    if (step === 2 && !showContactStep) {
       setStep(4);
     } else {
       setStep((s) => s + 1);
@@ -73,32 +112,59 @@ export default function BookPage() {
   }
 
   function prevStep() {
-    if (session && step === 4) {
+    if (step === 4 && !showContactStep) {
       setStep(2);
     } else {
       setStep((s) => s - 1);
     }
   }
 
+  // Visible step number for progress bar
+  const totalSteps = showContactStep ? 4 : 3;
+  function getDisplayStep(s: number) {
+    if (!showContactStep && s === 4) return 3;
+    return s;
+  }
+  const currentDisplay = getDisplayStep(step);
+
   async function handleSubmit() {
     setSubmitting(true);
     setError("");
     try {
+      const submitData = {
+        ...form,
+        firstName: session?.user?.name?.split(" ")[0] || form.firstName,
+        lastName: session?.user?.name?.split(" ").slice(1).join(" ") || form.lastName,
+        email: session?.user?.email || form.email,
+        // Use profile phone if we skipped contact step
+        phone: form.phone || profile?.phone || "",
+      };
+
       const res = await fetch("/api/book", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          firstName: session?.user?.name?.split(" ")[0] || form.firstName,
-          lastName: session?.user?.name?.split(" ").slice(1).join(" ") || form.lastName,
-          email: session?.user?.email || form.email,
-        }),
+        body: JSON.stringify(submitData),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         setError(data.error || "Something went wrong. Please try again.");
         return;
       }
+
+      // If signed in and phone was entered (not from profile), save to profile
+      if (session && form.phone && !hasProfilePhone) {
+        fetch("/api/customer/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: form.phone,
+            address: profile?.address || "",
+            city: profile?.city || "",
+            preferred_contact: profile?.preferred_contact || "call",
+          }),
+        }).catch(() => {});
+      }
+
       setTrackingToken(data.token);
       setSubmitted(true);
       setTimeout(() => {
@@ -149,31 +215,26 @@ export default function BookPage() {
 
         {/* Progress */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {[1, 2, 3, 4].map((s) => {
-            const displayStep = session ? (s <= 2 ? s : s - 1) : s;
-            const activeStep = session ? (step <= 2 ? step : step - 1) : step;
-            if (session && s === 3) return null;
-            return (
-              <div key={s} className="flex items-center gap-2">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                    activeStep >= displayStep
-                      ? "bg-amber-500 text-white"
-                      : "bg-white/20 text-white/50"
-                  }`}
-                >
-                  {displayStep}
-                </div>
-                {s < 4 && !(session && s === 2) && (
-                  <div
-                    className={`w-8 h-1 rounded ${
-                      activeStep > displayStep ? "bg-amber-500" : "bg-white/20"
-                    }`}
-                  />
-                )}
+          {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => (
+            <div key={s} className="flex items-center gap-2">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
+                  currentDisplay >= s
+                    ? "bg-amber-500 text-white"
+                    : "bg-white/20 text-white/50"
+                }`}
+              >
+                {s}
               </div>
-            );
-          })}
+              {s < totalSteps && (
+                <div
+                  className={`w-8 h-1 rounded ${
+                    currentDisplay > s ? "bg-amber-500" : "bg-white/20"
+                  }`}
+                />
+              )}
+            </div>
+          ))}
         </div>
 
         {/* Card */}
@@ -245,14 +306,37 @@ export default function BookPage() {
                   <p className="text-xs mt-1">Our tech may ask you to text a photo to (812) 564-3719 — it helps a lot!</p>
                 </div>
               </div>
+
+              {/* Signed-in with phone: show collapsed contact card */}
+              {hasProfilePhone && !contactExpanded && (
+                <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+                  <div className="text-sm text-navy">
+                    <span className="font-semibold">Booking as</span>{" "}
+                    {profile?.name || session?.user?.name} · {profile?.phone} ·{" "}
+                    Prefers {profile?.preferred_contact === "call" ? "📞 Call" : profile?.preferred_contact === "text" ? "💬 Text" : "📧 Email"}
+                  </div>
+                  <button
+                    onClick={() => setContactExpanded(true)}
+                    className="text-xs text-amber-600 font-semibold hover:text-amber-500 ml-3 shrink-0"
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Step 3: Contact Info (skipped if signed in) */}
-          {step === 3 && !session && (
+          {/* Step 3: Contact Info */}
+          {step === 3 && showContactStep && (
             <div>
               <h2 className="text-xl font-bold text-navy mb-1">How do we reach you?</h2>
               <p className="text-gray-500 text-sm mb-5">We'll call to confirm your appointment.</p>
+
+              {session && !hasProfilePhone && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-800 mb-4">
+                  💡 We'll save your phone number to your profile for next time.
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
@@ -263,6 +347,7 @@ export default function BookPage() {
                     type="text"
                     className="w-full border-2 border-gray-200 rounded-xl p-3 text-navy focus:border-amber-500 outline-none"
                     value={form.firstName}
+                    readOnly={!!session?.user?.name}
                     onChange={(e) => set("firstName", e.target.value)}
                   />
                 </div>
@@ -272,6 +357,7 @@ export default function BookPage() {
                     type="text"
                     className="w-full border-2 border-gray-200 rounded-xl p-3 text-navy focus:border-amber-500 outline-none"
                     value={form.lastName}
+                    readOnly={!!session?.user?.name}
                     onChange={(e) => set("lastName", e.target.value)}
                   />
                 </div>
@@ -299,6 +385,7 @@ export default function BookPage() {
                   className="w-full border-2 border-gray-200 rounded-xl p-3 text-navy focus:border-amber-500 outline-none"
                   placeholder="you@example.com"
                   value={form.email}
+                  readOnly={!!session?.user?.email}
                   onChange={(e) => set("email", e.target.value)}
                 />
               </div>
@@ -359,7 +446,7 @@ export default function BookPage() {
                 </div>
                 <div className="flex gap-2">
                   <span className="text-gray-500 w-28 flex-shrink-0">Phone:</span>
-                  <span className="text-navy">{form.phone}</span>
+                  <span className="text-navy">{form.phone || profile?.phone || "—"}</span>
                 </div>
                 {(form.email || session?.user?.email) && (
                   <div className="flex gap-2">

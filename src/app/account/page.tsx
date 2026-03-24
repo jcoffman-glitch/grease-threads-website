@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -14,6 +14,15 @@ interface Job {
   scheduledAt?: string;
   problemDescription: string;
   invoiceId?: string;
+}
+
+interface Profile {
+  name: string;
+  email: string;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  preferred_contact: string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -35,6 +44,13 @@ export default function AccountPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ phone: "", address: "", city: "", preferred_contact: "call" });
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -51,8 +67,46 @@ export default function AccountPage() {
           setLoading(false);
         })
         .catch(() => setLoading(false));
+
+      fetch("/api/customer/profile")
+        .then((r) => r.json())
+        .then((data) => {
+          setProfile(data);
+          setEditForm({
+            phone: data.phone || "",
+            address: data.address || "",
+            city: data.city || "",
+            preferred_contact: data.preferred_contact || "call",
+          });
+          setProfileLoading(false);
+        })
+        .catch(() => setProfileLoading(false));
     }
   }, [session]);
+
+  async function saveProfile() {
+    setSaving(true);
+    setSaveMsg("");
+    try {
+      const res = await fetch("/api/customer/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      if (res.ok) {
+        setProfile((p) => p ? { ...p, ...editForm } : p);
+        setEditing(false);
+        setSaveMsg("✅ Profile saved!");
+        setTimeout(() => setSaveMsg(""), 4000);
+      } else {
+        setSaveMsg("❌ Save failed. Try again.");
+      }
+    } catch {
+      setSaveMsg("❌ Network error.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (status === "loading") {
     return (
@@ -63,6 +117,8 @@ export default function AccountPage() {
   }
 
   if (!session) return null;
+
+  const missingPhone = !profileLoading && profile && !profile.phone;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
@@ -83,6 +139,29 @@ export default function AccountPage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+
+        {/* Missing phone banner */}
+        {missingPhone && (
+          <div className="bg-yellow-50 border border-yellow-300 rounded-xl px-5 py-4 flex items-center gap-3">
+            <span className="text-2xl">📞</span>
+            <div>
+              <p className="text-yellow-900 font-semibold text-sm">Add your phone number to make booking faster</p>
+              <p className="text-yellow-700 text-xs mt-0.5">
+                We&apos;ll pre-fill it next time you book a service.{" "}
+                <button
+                  onClick={() => {
+                    profileRef.current?.scrollIntoView({ behavior: "smooth" });
+                    setEditing(true);
+                  }}
+                  className="underline font-semibold"
+                >
+                  Add it now →
+                </button>
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* User info */}
         <div className="bg-white rounded-xl shadow-sm p-5 flex items-center gap-4">
           {session.user.image && (
@@ -181,6 +260,140 @@ export default function AccountPage() {
           )}
         </div>
 
+        {/* My Profile */}
+        <div ref={profileRef} className="bg-white rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-navy">My Profile</h2>
+            {!editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="text-sm font-semibold text-amber-600 hover:text-amber-500 transition-colors"
+              >
+                Edit
+              </button>
+            )}
+          </div>
+
+          {profileLoading ? (
+            <p className="text-gray-400 text-sm">Loading profile...</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Read-only fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">Name</p>
+                  <p className="text-sm font-medium text-navy">{profile?.name || session.user.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">Email</p>
+                  <p className="text-sm font-medium text-navy break-all">{profile?.email || session.user.email}</p>
+                </div>
+              </div>
+
+              {editing ? (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1 font-semibold">Phone Number</label>
+                    <input
+                      type="tel"
+                      className="w-full border-2 border-gray-200 rounded-xl p-3 text-navy text-sm focus:border-amber-500 outline-none"
+                      placeholder="(812) 555-1234"
+                      value={editForm.phone}
+                      onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1 font-semibold">Address</label>
+                    <input
+                      type="text"
+                      className="w-full border-2 border-gray-200 rounded-xl p-3 text-navy text-sm focus:border-amber-500 outline-none"
+                      placeholder="123 Main St"
+                      value={editForm.address}
+                      onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1 font-semibold">City</label>
+                    <input
+                      type="text"
+                      className="w-full border-2 border-gray-200 rounded-xl p-3 text-navy text-sm focus:border-amber-500 outline-none"
+                      placeholder="Carlisle"
+                      value={editForm.city}
+                      onChange={(e) => setEditForm((f) => ({ ...f, city: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-2 font-semibold">Preferred Contact Method</label>
+                    <div className="flex gap-3">
+                      {[
+                        { id: "call", label: "📞 Call" },
+                        { id: "text", label: "💬 Text" },
+                        { id: "email", label: "📧 Email" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setEditForm((f) => ({ ...f, preferred_contact: opt.id }))}
+                          className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                            editForm.preferred_contact === opt.id
+                              ? "border-amber-500 bg-amber-50 text-amber-800"
+                              : "border-gray-200 text-gray-600 hover:border-amber-300"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => { setEditing(false); setEditForm({ phone: profile?.phone || "", address: profile?.address || "", city: profile?.city || "", preferred_contact: profile?.preferred_contact || "call" }); }}
+                      className="flex-1 border-2 border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl hover:border-gray-300 transition text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveProfile}
+                      disabled={saving}
+                      className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-300 text-white font-bold py-2.5 rounded-xl transition text-sm"
+                    >
+                      {saving ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Phone</p>
+                      <p className="text-sm font-medium text-navy">{profile?.phone || <span className="text-gray-400 italic">Not set</span>}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">City</p>
+                      <p className="text-sm font-medium text-navy">{profile?.city || <span className="text-gray-400 italic">Not set</span>}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-400 mb-0.5">Address</p>
+                      <p className="text-sm font-medium text-navy">{profile?.address || <span className="text-gray-400 italic">Not set</span>}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Preferred Contact</p>
+                      <p className="text-sm font-medium text-navy capitalize">
+                        {profile?.preferred_contact === "call" ? "📞 Call" : profile?.preferred_contact === "text" ? "💬 Text" : "📧 Email"}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {saveMsg && (
+                <p className="text-sm font-semibold text-center">{saveMsg}</p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Quick Actions */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-bold text-navy mb-4">Quick Actions</h2>
@@ -202,8 +415,6 @@ export default function AccountPage() {
 
             <a
               href="/book"
-              target="_blank"
-              rel="noopener noreferrer"
               className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-amber hover:bg-amber/5 transition-colors"
             >
               <div className="w-10 h-10 bg-navy rounded-full flex items-center justify-center shrink-0">
