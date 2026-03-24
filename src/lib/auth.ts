@@ -11,6 +11,10 @@ function getDb() {
   });
 }
 
+// Force callback URL to always use the stable production alias,
+// so preview deployments don't generate unregistered redirect URIs.
+const CANONICAL_URL = "https://website-mauve-one-60.vercel.app";
+
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
@@ -21,6 +25,7 @@ export const authOptions: AuthOptions = {
           prompt: "consent",
           access_type: "offline",
           response_type: "code",
+          redirect_uri: `${CANONICAL_URL}/api/auth/callback/google`,
         },
       },
     }),
