@@ -32,10 +32,15 @@ async function notifyNewLead(job: Job) {
 }
 
 export async function GET() {
-  const denied = await auth();
-  if (denied) return denied;
-  const jobs = await dbGetJobs();
-  return Response.json(jobs);
+  try {
+    const denied = await auth();
+    if (denied) return denied;
+    const jobs = await dbGetJobs();
+    return Response.json(jobs);
+  } catch (e) {
+    console.error("GET /api/admin/jobs error:", e);
+    return Response.json({ error: String(e) }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -68,9 +73,14 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = await auth();
-  if (denied) return denied;
-  const { id } = await request.json();
-  await dbDeleteJob(id);
-  return Response.json({ success: true });
+  try {
+    const denied = await auth();
+    if (denied) return denied;
+    const { id } = await request.json();
+    await dbDeleteJob(id);
+    return Response.json({ success: true });
+  } catch (e) {
+    console.error("DELETE /api/admin/jobs error:", e);
+    return Response.json({ error: String(e) }, { status: 500 });
+  }
 }
