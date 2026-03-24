@@ -67,8 +67,12 @@ export const authOptions: AuthOptions = {
 
       // For Google Sign-In, allow anyone
       if (account?.provider === "google" && user.email) {
-        // Upsert customer record for non-admin Google sign-ins
-        const isAdmin = user.email.endsWith("@greasethreads.com");
+        // Upsert customer record for non-admin/non-IT Google sign-ins
+        const itEmails = [
+          process.env.RYAN_EMAIL || "ryan@greasethreads.com",
+          "rcoffman34@gmail.com",
+        ];
+        const isAdmin = user.email.endsWith("@greasethreads.com") || itEmails.includes(user.email);
         if (!isAdmin) {
           try {
             const db = getDb();
@@ -92,7 +96,12 @@ export const authOptions: AuthOptions = {
     },
     async jwt({ token, user, account }) {
       if (user) {
-        const ryanEmail = process.env.RYAN_EMAIL || "ryan@greasethreads.com";
+        // IT admin emails — personal Gmail allowed for Ryan (not on Workspace domain)
+        const itEmails = [
+          process.env.RYAN_EMAIL || "ryan@greasethreads.com",
+          "rcoffman34@gmail.com",
+        ];
+
         if (!user.email) {
           // Credentials login → admin
           token.role = "admin";
@@ -101,7 +110,7 @@ export const authOptions: AuthOptions = {
           user.email === "gnt-test-tech@greasethreads.com"
         ) {
           token.role = "technician";
-        } else if (user.email === ryanEmail) {
+        } else if (itEmails.includes(user.email)) {
           token.role = "it";
         } else if (
           user.email === "gnt-test-customer@greasethreads.com" ||
