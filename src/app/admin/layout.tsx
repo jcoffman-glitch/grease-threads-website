@@ -17,6 +17,7 @@ const navItems = [
   { href: "/admin/social", label: "Social", icon: "📱" },
   { href: "/admin/marketing", label: "Marketing", icon: "📣" },
   { href: "/admin/reports", label: "Reports", icon: "📊" },
+  { href: "/admin/customers", label: "Customers", icon: "👥" },
 ];
 
 // Bottom nav items for mobile
