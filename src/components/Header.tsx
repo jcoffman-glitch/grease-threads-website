@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { data: session } = useSession();
 
   return (
     <header className="bg-navy text-white sticky top-0 z-50">
@@ -30,6 +32,12 @@ export default function Header() {
           </Link>
           <Link href="/contact" className="hover:text-amber transition-colors">
             Contact
+          </Link>
+          <Link
+            href={session ? "/account" : "/login"}
+            className="hover:text-amber transition-colors text-sm"
+          >
+            {session ? "My Account" : "Sign In"}
           </Link>
           <a
             href="tel:8125643719"
@@ -101,6 +109,13 @@ export default function Header() {
               onClick={() => setMenuOpen(false)}
             >
               Contact
+            </Link>
+            <Link
+              href={session ? "/account" : "/login"}
+              className="py-2 hover:text-amber transition-colors"
+              onClick={() => setMenuOpen(false)}
+            >
+              {session ? "My Account" : "Sign In"}
             </Link>
             <a
               href="tel:8125643719"
