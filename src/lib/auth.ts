@@ -37,6 +37,25 @@ export const authOptions: AuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) return null;
+
+        // Check technician credentials first
+        if (
+          process.env.TECH_USERNAME &&
+          process.env.TECH_PASSWORD &&
+          credentials.username === process.env.TECH_USERNAME
+        ) {
+          const techStored = process.env.TECH_PASSWORD.trim();
+          let techValid = false;
+          if (techStored.startsWith("$2")) {
+            techValid = await bcrypt.compare(credentials.password.trim(), techStored);
+          } else {
+            techValid = credentials.password.trim() === techStored;
+          }
+          if (!techValid) return null;
+          return { id: "2", name: "Technician", isTech: true };
+        }
+
+        // Check admin credentials
         if (credentials.username !== process.env.ADMIN_USERNAME) return null;
 
         const stored = (process.env.ADMIN_PASSWORD || "").trim();
@@ -91,10 +110,16 @@ export const authOptions: AuthOptions = {
     },
     async jwt({ token, user, account }) {
       if (user) {
-        // Admin: greasethreads.com email OR credentials login
-        const isAdmin =
-          user.email?.endsWith("@greasethreads.com") || !user.email;
-        token.role = isAdmin ? "admin" : "customer";
+        if ((user as unknown as Record<string, unknown>).isTech) {
+          token.role = "technician";
+        } else if (
+          user.email?.endsWith("@greasethreads.com") ||
+          !user.email
+        ) {
+          token.role = "admin";
+        } else {
+          token.role = "customer";
+        }
         token.provider = account?.provider;
       }
       return token;

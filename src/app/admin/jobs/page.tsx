@@ -197,8 +197,22 @@ export default function JobsPage() {
 
   async function remove(id: string) {
     if (!confirm("Delete this job?")) return;
-    await fetch("/api/admin/jobs", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    setJobs(jobs.filter((j) => j.id !== id));
+    try {
+      const res = await fetch("/api/admin/jobs", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(`Delete failed (${res.status}): ${err.error || "Unknown error"}`, "error");
+        return;
+      }
+      setJobs(jobs.filter((j) => j.id !== id));
+      showToast("Job deleted", "success");
+    } catch (e) {
+      showToast(`Delete failed: ${e instanceof Error ? e.message : "Network error"}`, "error");
+    }
   }
 
   async function addItem(jobId: string) {

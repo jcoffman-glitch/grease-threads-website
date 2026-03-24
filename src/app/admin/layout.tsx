@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { SessionProvider } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
@@ -14,10 +14,10 @@ const navItems = [
   { href: "/admin/inventory", label: "Inventory", icon: "📦" },
   { href: "/admin/price-list", label: "Price List", icon: "🏷️" },
   { href: "/admin/service-log", label: "Service Log", icon: "📋" },
-  { href: "/admin/social", label: "Social", icon: "📱" },
-  { href: "/admin/marketing", label: "Marketing", icon: "📣" },
-  { href: "/admin/reports", label: "Reports", icon: "📊" },
-  { href: "/admin/customers", label: "Customers", icon: "👥" },
+  { href: "/admin/social", label: "Social", icon: "📱", adminOnly: true },
+  { href: "/admin/marketing", label: "Marketing", icon: "📣", adminOnly: true },
+  { href: "/admin/reports", label: "Reports", icon: "📊", adminOnly: true },
+  { href: "/admin/customers", label: "Customers", icon: "👥", adminOnly: true },
 ];
 
 // Bottom nav items for mobile
@@ -97,6 +97,13 @@ function BottomNav() {
 function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { data: session } = useSession();
+  const role = session?.user?.role;
+  const isTech = role === "technician";
+
+  const filteredNavItems = isTech
+    ? navItems.filter((item) => !item.adminOnly)
+    : navItems;
 
   if (pathname === "/admin/login") {
     return <>{children}</>;
@@ -119,10 +126,10 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       >
         <div className="p-4 border-b border-navy-light">
           <h1 className="text-lg font-bold text-amber">Grease &amp; Threads</h1>
-          <p className="text-xs text-gray-400">Admin Panel</p>
+          <p className="text-xs text-gray-400">{isTech ? "Tech Panel" : "Admin Panel"}</p>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
