@@ -264,6 +264,9 @@ export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job |
 
 export async function dbDeleteJob(id: string): Promise<void> {
   await ensureSchema();
+  // Delete child records first to avoid foreign key constraint violations
+  await client.execute({ sql: "DELETE FROM job_items WHERE job_id = ?", args: [id] });
+  await client.execute({ sql: "DELETE FROM invoices WHERE job_id = ?", args: [id] });
   await client.execute({ sql: "DELETE FROM jobs WHERE id = ?", args: [id] });
 }
 
