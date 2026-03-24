@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { SignJWT } from "jose";
+import { encode } from "next-auth/jwt";
 import { randomUUID } from "crypto";
 
 export async function POST(req: Request) {
@@ -25,20 +25,23 @@ export async function POST(req: Request) {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    name: `Test ${role}`,
-    email,
-    role,
-    provider: "test",
-    iat: now,
-    exp: now + 60 * 60 * 24, // 24 hours
-    jti: randomUUID(),
-  };
 
-  const encodedSecret = new TextEncoder().encode(secret);
-  const token = await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .sign(encodedSecret);
+  // Use NextAuth's own encode() so the token is a proper JWE that NextAuth can decrypt.
+  // Plain SignJWT (JWS) won't work — NextAuth v4 uses encrypted tokens by default.
+  const token = await encode({
+    secret,
+    token: {
+      name: `Test ${role}`,
+      email,
+      role,
+      provider: "test",
+      sub: email,
+      iat: now,
+      exp: now + 60 * 60 * 24,
+      jti: randomUUID(),
+    },
+    maxAge: 60 * 60 * 24,
+  });
 
   const response = NextResponse.json({ ok: true });
   response.cookies.set("next-auth.session-token", token, {

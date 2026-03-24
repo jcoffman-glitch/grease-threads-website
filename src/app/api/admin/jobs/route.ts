@@ -48,14 +48,19 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = await auth();
-  if (denied) return denied;
-  const body = await request.json();
-  const job = await dbCreateJob(body);
-  if (job.status === "Lead") {
-    await notifyNewLead(job);
+  try {
+    const denied = await auth();
+    if (denied) return denied;
+    const body = await request.json();
+    const job = await dbCreateJob(body);
+    if (job.status === "Lead") {
+      await notifyNewLead(job);
+    }
+    return Response.json(job);
+  } catch (e) {
+    console.error("POST /api/admin/jobs error:", e);
+    return Response.json({ error: String(e) }, { status: 500 });
   }
-  return Response.json(job);
 }
 
 export async function PUT(request: Request) {

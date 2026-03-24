@@ -39,7 +39,8 @@ export async function ensureSchema(): Promise<void> {
       notes TEXT,
       tracking_token TEXT UNIQUE,
       google_review_sent INTEGER DEFAULT 0,
-      sheets_synced INTEGER DEFAULT 0
+      sheets_synced INTEGER DEFAULT 0,
+      lead_source TEXT DEFAULT 'direct'
     );
     CREATE TABLE IF NOT EXISTS job_items (
       id TEXT PRIMARY KEY,
@@ -105,9 +106,24 @@ export async function ensureSchema(): Promise<void> {
       sent_at TEXT,
       status TEXT DEFAULT 'sent'
     );
+    CREATE TABLE IF NOT EXISTS customers (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      email TEXT UNIQUE,
+      phone TEXT,
+      address TEXT,
+      city TEXT,
+      google_id TEXT,
+      google_review_sent INTEGER DEFAULT 0,
+      created_at TEXT,
+      notes TEXT,
+      preferred_contact TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS customers_email_unique ON customers(email) WHERE email IS NOT NULL;
   `);
   // v2 schema migrations — add columns if missing
   const v2Migrations = [
+    "ALTER TABLE jobs ADD COLUMN lead_source TEXT DEFAULT 'direct'",
     "ALTER TABLE jobs ADD COLUMN equipment_type TEXT",
     "ALTER TABLE jobs ADD COLUMN model_number TEXT",
     "ALTER TABLE jobs ADD COLUMN ai_suggestions TEXT",

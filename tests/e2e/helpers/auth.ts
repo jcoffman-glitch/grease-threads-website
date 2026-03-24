@@ -26,4 +26,22 @@ export async function loginAs(page: Page, role: Role): Promise<void> {
       `loginAs(${role}) failed: ${res.status()} — ${body}`
     );
   }
+
+  // Extract the session cookie from the response and add it to the browser context.
+  // page.request and page (browser) have separate cookie jars — we must bridge them.
+  const headers = res.headers();
+  const setCookie = headers["set-cookie"] || "";
+  const cookieMatch = setCookie.match(/next-auth\.session-token=([^;]+)/);
+  if (cookieMatch) {
+    await page.context().addCookies([
+      {
+        name: "next-auth.session-token",
+        value: cookieMatch[1],
+        domain: new URL(origin).hostname,
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+  }
 }
