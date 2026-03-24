@@ -13,12 +13,7 @@ const EMAIL_MAP: Record<Role, string> = {
  * Sets the next-auth.session-token cookie on the page's browser context.
  */
 export async function loginAs(page: Page, role: Role): Promise<void> {
-  const baseURL =
-    page.context().pages()[0]?.url().replace(/\/$/, "") ||
-    process.env.BASE_URL ||
-    "http://localhost:3000";
-
-  // Derive the origin from baseURL for the API call
+  const baseURL = process.env.BASE_URL || "http://localhost:3000";
   const origin = new URL(baseURL).origin;
 
   const res = await page.request.post(`${origin}/api/auth/test-session`, {
