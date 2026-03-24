@@ -64,13 +64,19 @@ export default function JobsPage() {
   const [isOffline, setIsOffline] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const pullStartY = useRef(0);
+  const [customers, setCustomers] = useState<{ id: string; name: string; phone: string; email: string; address: string; city: string }[]>([]);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/admin/jobs").then((r) => r.json()),
       fetch("/api/admin/price-list").then((r) => r.json()),
-    ]).then(([j, p]) => {
+      fetch("/api/admin/customers").then((r) => r.json()).catch(() => []),
+    ]).then(([j, p, c]) => {
       setJobs(j);
+      setCustomers(c || []);
       setPriceList(p);
     }).finally(() => setLoading(false));
   }, []);
@@ -84,6 +90,35 @@ export default function JobsPage() {
       setIsPulling(false);
     }
   }, []);
+
+  // Close customer dropdown on click outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setShowCustomerDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filteredCustomers = customers.filter((c) =>
+    c.name && customerQuery.length >= 1 && c.name.toLowerCase().includes(customerQuery.toLowerCase())
+  );
+
+  function selectCustomer(c: typeof customers[0]) {
+    if (!editing) return;
+    setEditing({
+      ...editing,
+      customerName: c.name || "",
+      customerPhone: c.phone || "",
+      phone: c.phone || "",
+      customerEmail: c.email || "",
+      address: c.address || "",
+    });
+    setCustomerQuery(c.name || "");
+    setShowCustomerDropdown(false);
+  }
 
   // Offline detection + replay queue on reconnect
   useEffect(() => {
@@ -102,6 +137,8 @@ export default function JobsPage() {
   useEffect(() => {
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("new") === "1" && !loading) {
       setEditing({ ...emptyJob });
+      setCustomerQuery("");
+      setShowCustomerDropdown(false);
     }
   }, [loading]);
 
@@ -360,7 +397,7 @@ export default function JobsPage() {
             <option value="date">Sort: Date</option>
             <option value="status">Sort: Status</option>
           </select>
-          <button onClick={() => setEditing({ ...emptyJob })} className="px-4 py-2 bg-amber text-white rounded-lg hover:bg-amber-dark text-sm font-medium">
+          <button onClick={() => { setEditing({ ...emptyJob }); setCustomerQuery(""); setShowCustomerDropdown(false); }} className="px-4 py-2 bg-amber text-white rounded-lg hover:bg-amber-dark text-sm font-medium">
             + New Job
           </button>
         </div>
@@ -482,7 +519,7 @@ export default function JobsPage() {
                           className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50">
                           {generatingInvoice === job.id ? "Generating..." : "🧾 Generate Invoice"}
                         </button>
-                        <button onClick={() => setEditing({ ...job })} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
+                        <button onClick={() => { setEditing({ ...job }); setCustomerQuery(job.customerName || ""); setShowCustomerDropdown(false); }} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
                           ✏️ Edit Job
                         </button>
                         <button onClick={() => remove(job.id)} className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200">
@@ -682,7 +719,50 @@ export default function JobsPage() {
             <h2 className="text-lg font-bold text-navy mb-5">{editing.id ? "Edit Job" : "New Job"}</h2>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Customer Name" value={editing.customerName || ""} onChange={(v) => setEditing({ ...editing, customerName: v })} required />
+                <div ref={customerDropdownRef} className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                  <input
+                    type="text"
+                    value={editing.customerName || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditing({ ...editing, customerName: v });
+                      setCustomerQuery(v);
+                      setShowCustomerDropdown(v.length >= 1);
+                    }}
+                    onFocus={() => { if ((editing.customerName || "").length >= 1) setShowCustomerDropdown(true); }}
+                    required
+                    autoComplete="off"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                    placeholder="Start typing..."
+                  />
+                  {showCustomerDropdown && filteredCustomers.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredCustomers.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => selectCustomer(c)}
+                          className="w-full text-left px-3 py-2 hover:bg-amber-50 border-b border-gray-100 last:border-0"
+                        >
+                          <span className="font-medium text-sm text-gray-900">{c.name}</span>
+                          <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">RETURNING</span>
+                          {(c.phone || c.address) && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {[c.phone, c.address, c.city].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {showCustomerDropdown && customerQuery.length >= 2 && filteredCustomers.length === 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2">
+                      <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">NEW</span>
+                      <span className="text-xs text-gray-500 ml-2">New customer — will be saved automatically</span>
+                    </div>
+                  )}
+                </div>
                 <Field label="Phone" type="tel" value={editing.customerPhone || editing.phone || ""} onChange={(v) => setEditing({ ...editing, customerPhone: v, phone: v })} required />
               </div>
               <Field label="Email (optional)" type="email" value={editing.customerEmail || ""} onChange={(v) => setEditing({ ...editing, customerEmail: v })} />
