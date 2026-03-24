@@ -40,7 +40,7 @@ export default function Footer() {
                 Contact
               </Link>
               <a
-                href="https://calendar.app.google/NEBSdUFjbUY7yPxF6"
+                href="/book"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-300 hover:text-amber transition-colors text-sm"
@@ -72,7 +72,7 @@ export default function Footer() {
                 Facebook
               </a>
               <a
-                href="https://calendar.app.google/NEBSdUFjbUY7yPxF6"
+                href="/book"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-300 hover:text-amber transition-colors text-sm"

@@ -184,7 +184,7 @@ export default function ContactPage() {
               <div className="bg-white rounded-xl p-6 shadow-md border border-gray-100">
                 <h3 className="font-bold text-lg mb-2">Book Online</h3>
                 <a
-                  href="https://calendar.app.google/NEBSdUFjbUY7yPxF6"
+                  href="/book"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-amber font-semibold hover:text-amber-dark transition-colors"

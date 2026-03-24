@@ -83,7 +83,7 @@ export function followupEmail(params: {
 }): EmailTemplate {
   const firstName = esc(params.customerName.split(" ")[0]);
   const serviceType = esc(params.serviceType);
-  const bookingLink = params.bookingLink || "https://calendar.app.google/NEBSdUFjbUY7yPxF6";
+  const bookingLink = params.bookingLink || "https://www.greasethreads.com/book";
   const subject = "Time for a tune-up? — Grease & Threads";
   const text = `Hi ${firstName},\n\nIt's been about a month since Joe serviced your ${params.serviceType}. Regular maintenance keeps things running longer and prevents costly breakdowns.\n\nGive us a call at 812-564-3719 or book online: ${bookingLink}\n\n— Grease & Threads`;
   const html = `

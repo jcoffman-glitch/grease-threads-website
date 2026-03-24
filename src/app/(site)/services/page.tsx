@@ -148,7 +148,7 @@ export default function ServicesPage() {
               Call (812) 564-3719
             </a>
             <a
-              href="https://calendar.app.google/NEBSdUFjbUY7yPxF6"
+              href="/book"
               target="_blank"
               rel="noopener noreferrer"
               className="bg-white hover:bg-gray-100 text-navy font-bold px-8 py-4 rounded-lg text-lg transition-colors min-h-[52px] inline-flex items-center justify-center"

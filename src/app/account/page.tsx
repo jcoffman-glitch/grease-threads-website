@@ -201,7 +201,7 @@ export default function AccountPage() {
             </a>
 
             <a
-              href="https://calendar.app.google/NEBSdUFjbUY7yPxF6"
+              href="/book"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-amber hover:bg-amber/5 transition-colors"
