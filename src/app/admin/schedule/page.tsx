@@ -72,7 +72,7 @@ export default function SchedulePage() {
     })
     .filter(j => {
       if (filter === "All") return true;
-      if (filter === "Joe") return j.assignedTo === "joe";
+      if (filter === "Joe") return j.assignedTo === "joe" || !j.assignedTo;
       if (filter === "Anthoney") return j.assignedTo === "anthoney";
       if (filter === "Warranty") return j.warrantyFlag;
       if (filter === "Subscription") return j.subscriptionFlag;

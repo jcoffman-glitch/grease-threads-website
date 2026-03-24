@@ -75,13 +75,19 @@ function StatusBadge({ status }: { status: string }) {
     Lead: "bg-gray-100 text-gray-700",
     Called: "bg-blue-100 text-blue-700",
     Scheduled: "bg-blue-200 text-blue-800",
+    "Work Order": "bg-blue-200 text-blue-800",
     "En Route": "bg-yellow-200 text-yellow-800",
+    Working: "bg-orange-200 text-orange-800",
     "On Scene": "bg-orange-200 text-orange-800",
     "In Progress": "bg-yellow-100 text-yellow-800",
+    "Job Done": "bg-green-200 text-green-800",
     Complete: "bg-green-200 text-green-800",
     Completed: "bg-green-100 text-green-700",
+    "Final Invoice": "bg-purple-100 text-purple-700",
     Invoiced: "bg-purple-200 text-purple-800",
+    Payment: "bg-teal-100 text-teal-700",
     Paid: "bg-teal-200 text-teal-800",
+    Review: "bg-yellow-100 text-yellow-700",
   };
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${colors[status] || "bg-gray-100 text-gray-700"}`}>
@@ -90,7 +96,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── Anthoney's Dashboard ──────────────────────────────────────────────────────
+// ── Anthoney's Dashboard — "What's My Day" ──────────────────────────────────
 
 function TechDashboard({ jobs }: { jobs: Job[] }) {
   const today = new Date().toDateString();
@@ -101,6 +107,10 @@ function TechDashboard({ jobs }: { jobs: Job[] }) {
     })
     .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
 
+  function mapsUrl(address: string) {
+    return `https://maps.google.com/?q=${encodeURIComponent(address)}`;
+  }
+
   return (
     <div className="max-w-2xl mx-auto pb-10">
       <h1 className="text-2xl font-black text-navy mb-1">Today&apos;s Jobs</h1>
@@ -109,20 +119,30 @@ function TechDashboard({ jobs }: { jobs: Job[] }) {
       {todaysJobs.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
           <div className="text-5xl mb-3">🎉</div>
-          <p className="text-gray-500 font-medium">No jobs scheduled for today</p>
+          <p className="text-gray-500 font-medium">No jobs scheduled for today. Check back later.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {todaysJobs.map(job => (
             <Link key={job.id} href={`/admin/jobs/${job.id}`}
-              className="block bg-white rounded-xl shadow-sm border border-gray-100 p-4 active:scale-[0.98] transition-transform">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="font-bold text-navy text-lg">{job.customerName}</p>
-                  <p className="text-sm text-gray-500">{job.address || "No address"}</p>
-                </div>
+              className="block bg-white rounded-xl shadow-sm border border-gray-100 p-5 active:scale-[0.98] transition-transform">
+              <div className="flex items-start justify-between mb-3">
+                <p className="font-black text-navy text-xl leading-tight">{job.customerName}</p>
                 <StatusBadge status={job.status} />
               </div>
+              {job.address ? (
+                <a
+                  href={mapsUrl(job.address)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  className="block text-sm text-blue-600 font-medium mb-2 underline"
+                >
+                  {job.address}
+                </a>
+              ) : (
+                <p className="text-sm text-gray-400 mb-2">No address</p>
+              )}
               <div className="flex items-center gap-3 text-sm text-gray-500">
                 <span>{job.serviceType}</span>
                 <span>·</span>
@@ -138,12 +158,11 @@ function TechDashboard({ jobs }: { jobs: Job[] }) {
   );
 }
 
-// ── Joe's Dashboard ──────────────────────────────────────────────────────────
+// ── Joe's Dashboard — "Grow & Run" ──────────────────────────────────────────
 
-function AdminDashboardView({ jobs, invoices, inventory, showNewJob, setShowNewJob }: {
+function AdminDashboardView({ jobs, invoices, showNewJob, setShowNewJob }: {
   jobs: Job[];
   invoices: Invoice[];
-  inventory: InventoryItem[];
   showNewJob: boolean;
   setShowNewJob: (v: boolean) => void;
 }) {
@@ -152,10 +171,18 @@ function AdminDashboardView({ jobs, invoices, inventory, showNewJob, setShowNewJ
   thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
   const thisMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
-  const newRequests = jobs.filter(j => j.status === "New" || j.status === "Lead");
-  const todaysJobs = jobs.filter(j => j.scheduledAt && new Date(j.scheduledAt).toDateString() === today);
-  const unpaidInvoices = invoices.filter(i => i.status !== "Paid");
-  const unpaidTotal = unpaidInvoices.reduce((sum, i) => sum + (i.total ?? 0), 0);
+  // Action Queue counts
+  const newRequests = jobs.filter(j => j.status === "Lead");
+  const outstandingInvoices = invoices.filter(i => i.status === "Sent" || i.status === "Overdue" || i.status === "Draft");
+  const outstandingTotal = outstandingInvoices.reduce((sum, i) => sum + (i.total ?? 0), 0);
+  const followUps = jobs.filter(j => j.followUpRequired);
+
+  // Today's schedule
+  const todaySchedule = jobs
+    .filter(j => j.scheduledAt && new Date(j.scheduledAt).toDateString() === today)
+    .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
+
+  // Business Pulse
   const jobsThisWeek = jobs.filter(j => {
     const d = j.scheduledAt || j.createdAt;
     return d && new Date(d) >= thisWeekStart;
@@ -164,26 +191,20 @@ function AdminDashboardView({ jobs, invoices, inventory, showNewJob, setShowNewJ
     .filter(i => i.status === "Paid" && i.paidAt && new Date(i.paidAt) >= thisMonthStart)
     .reduce((sum, i) => sum + (i.total ?? 0), 0);
   const pendingReviews = jobs.filter(j =>
-    (j.status === "Complete" || j.status === "Completed" || j.status === "Paid") && !j.googleReviewSent
-  );
-  const lowStock = inventory.filter(i => i.qtyOnHand <= i.reorderPoint);
-
-  // Upcoming subscription reminders (jobs with subscription_flag due in next 3 days)
-  const threeDaysFromNow = new Date();
-  threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
-  const subReminders = jobs.filter(j =>
-    j.subscriptionFlag && j.scheduledAt && new Date(j.scheduledAt) <= threeDaysFromNow && new Date(j.scheduledAt) >= new Date()
+    (j.status === "Paid" || j.status === "Payment" || j.status === "Review" || j.status === "Complete" || j.status === "Completed" || j.status === "Job Done") && !j.googleReviewSent
   );
 
-  // Suggested action
+  // Suggested Next Action (spec priority)
   let suggestedAction = "";
-  if (unpaidInvoices.length > 0) suggestedAction = `${unpaidInvoices.length} invoice${unpaidInvoices.length > 1 ? "s" : ""} unpaid — send reminder?`;
-  else if (newRequests.length > 0) suggestedAction = `${newRequests.length} new request${newRequests.length > 1 ? "s" : ""} — review and schedule`;
-  else if (pendingReviews.length > 0) suggestedAction = `${pendingReviews.length} review${pendingReviews.length > 1 ? "s" : ""} to send`;
-
-  const todaySchedule = todaysJobs.sort((a, b) =>
-    new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime()
-  );
+  if (newRequests.length > 0) {
+    suggestedAction = `Call back ${newRequests.length} new lead${newRequests.length > 1 ? "s" : ""}`;
+  } else if (outstandingInvoices.length > 0) {
+    suggestedAction = `Follow up on ${outstandingInvoices.length} unpaid invoice${outstandingInvoices.length > 1 ? "s" : ""}`;
+  } else if (pendingReviews.length > 0) {
+    suggestedAction = `Request Google reviews from ${pendingReviews.length} customer${pendingReviews.length > 1 ? "s" : ""}`;
+  } else {
+    suggestedAction = "All caught up! Great work.";
+  }
 
   return (
     <div className="max-w-2xl mx-auto pb-10">
@@ -194,37 +215,25 @@ function AdminDashboardView({ jobs, invoices, inventory, showNewJob, setShowNewJ
         />
       )}
 
-      {/* Action Queue */}
       <h1 className="text-2xl font-black text-navy mb-4">Command Center</h1>
 
-      {newRequests.length > 0 && (
-        <Link href="/admin/jobs?filter=Lead"
-          className="flex items-center gap-3 bg-amber text-white px-5 py-4 rounded-xl mb-4 animate-pulse shadow-lg">
-          <span className="text-2xl">🔔</span>
-          <span className="font-bold text-lg">{newRequests.length} New Request{newRequests.length > 1 ? "s" : ""} — Tap to review</span>
-          <span className="ml-auto text-white/80">→</span>
-        </Link>
-      )}
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3 mb-3">
+      {/* Action Queue — 3 cards */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
         <Link href="/admin/jobs?filter=Lead"
           className="bg-amber/10 border-2 border-amber rounded-xl p-4 flex flex-col items-center text-center active:scale-95 transition-transform">
-          <span className="text-2xl mb-1">🔔</span>
           <span className="text-3xl font-black text-amber">{newRequests.length}</span>
           <span className="text-xs font-semibold text-amber/80 mt-1">New Requests</span>
         </Link>
-        <Link href="/admin/invoices?filter=unpaid"
+        <Link href="/admin/invoices"
           className="bg-red-50 border-2 border-red-300 rounded-xl p-4 flex flex-col items-center text-center active:scale-95 transition-transform">
-          <span className="text-2xl mb-1">🧾</span>
-          <span className="text-2xl font-black text-red-600">{unpaidInvoices.length}</span>
-          <span className="text-xs font-semibold text-red-500 mt-0.5">${unpaidTotal.toFixed(0)} owed</span>
+          <span className="text-2xl font-black text-red-600">{outstandingInvoices.length}</span>
+          <span className="text-xs font-semibold text-red-500 mt-0.5">${outstandingTotal.toFixed(0)} owed</span>
+          <span className="text-xs font-semibold text-red-400">Invoices</span>
         </Link>
-        <Link href="/admin/schedule"
-          className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 flex flex-col items-center text-center active:scale-95 transition-transform">
-          <span className="text-2xl mb-1">📅</span>
-          <span className="text-3xl font-black text-blue-600">{subReminders.length}</span>
-          <span className="text-xs font-semibold text-blue-500 mt-1">Sub Due Soon</span>
+        <Link href="/admin/jobs?filter=followup"
+          className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4 flex flex-col items-center text-center active:scale-95 transition-transform">
+          <span className="text-3xl font-black text-orange-600">{followUps.length}</span>
+          <span className="text-xs font-semibold text-orange-500 mt-1">Follow-ups</span>
         </Link>
       </div>
 
@@ -234,16 +243,18 @@ function AdminDashboardView({ jobs, invoices, inventory, showNewJob, setShowNewJ
           <h2 className="font-bold text-navy text-lg">Today&apos;s Schedule</h2>
         </div>
         {todaySchedule.length === 0 ? (
-          <div className="px-5 py-6 text-gray-400 text-sm text-center">No jobs scheduled for today</div>
+          <div className="px-5 py-6 text-gray-400 text-sm text-center">Nothing scheduled today.</div>
         ) : (
           <div className="divide-y divide-gray-50">
             {todaySchedule.map(job => (
               <Link key={job.id} href={`/admin/jobs/${job.id}`}
-                className="flex items-start gap-3 px-5 py-4 active:bg-gray-50">
+                className="flex items-center gap-3 px-5 py-4 active:bg-gray-50">
+                <span className="text-sm font-bold text-navy whitespace-nowrap">
+                  {new Date(job.scheduledAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-navy truncate">{job.customerName}</p>
-                  <p className="text-sm text-gray-500 truncate">{job.address || "No address"}</p>
-                  <p className="text-xs text-gray-400">{job.serviceType} · {new Date(job.scheduledAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                  <p className="text-xs text-gray-400 truncate">{job.address || "No address"} · {job.serviceType}</p>
                 </div>
                 <StatusBadge status={job.status} />
               </Link>
@@ -269,11 +280,12 @@ function AdminDashboardView({ jobs, invoices, inventory, showNewJob, setShowNewJ
             <p className="text-xs text-gray-500">Reviews Pending</p>
           </div>
         </div>
-        {suggestedAction && (
-          <div className="mt-4 bg-amber/10 rounded-lg p-3 text-sm text-amber-800 font-medium">
-            💡 {suggestedAction}
-          </div>
-        )}
+      </div>
+
+      {/* Suggested Next Action */}
+      <div className="bg-amber/10 rounded-xl p-4 mb-4 border border-amber/30">
+        <p className="text-sm font-bold text-navy mb-1">Suggested Next Action</p>
+        <p className="text-sm text-amber-800">{suggestedAction}</p>
       </div>
 
       {/* Quick Actions */}
@@ -292,12 +304,65 @@ function AdminDashboardView({ jobs, invoices, inventory, showNewJob, setShowNewJ
             Invoices
           </Link>
         </div>
-        {lowStock.length > 0 && (
-          <Link href="/admin/inventory?filter=low"
-            className="block bg-orange-50 border border-orange-200 text-orange-700 font-semibold py-3 rounded-xl text-center text-sm">
-            📦 {lowStock.length} item{lowStock.length > 1 ? "s" : ""} low in stock
+      </div>
+    </div>
+  );
+}
+
+// ── Ryan's System Card ──────────────────────────────────────────────────────
+
+function SystemCard() {
+  const [info, setInfo] = useState<{
+    testBypass: boolean;
+    resendKey: boolean;
+    anthropicKey: boolean;
+    commitSha: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/system-info")
+      .then(r => r.json())
+      .then(setInfo)
+      .catch(() => null);
+  }, []);
+
+  if (!info) return null;
+
+  return (
+    <div className="max-w-2xl mx-auto mt-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 className="font-bold text-navy text-lg mb-3">System</h2>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-600">TEST_AUTH_BYPASS</span>
+            {info.testBypass ? (
+              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">ON</span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">OFF</span>
+            )}
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">RESEND_API_KEY</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${info.resendKey ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+              {info.resendKey ? "Set" : "Not Set"}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">ANTHROPIC_API_KEY</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${info.anthropicKey ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+              {info.anthropicKey ? "Set" : "Not Set"}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Build</span>
+            <span className="text-xs font-mono text-gray-500">{info.commitSha}</span>
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <Link href="/admin/users" className="text-sm text-blue-600 font-medium">
+            Manage Users →
           </Link>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -309,7 +374,6 @@ export default function AdminDashboard() {
   const { data: session } = useSession();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewJob, setShowNewJob] = useState(false);
 
@@ -325,11 +389,9 @@ export default function AdminDashboard() {
     Promise.all([
       fetch("/api/admin/jobs").then(r => r.json()).catch(() => []),
       fetch("/api/admin/invoices").then(r => r.json()).catch(() => []),
-      fetch("/api/admin/inventory").then(r => r.json()).catch(() => []),
-    ]).then(([j, i, inv]) => {
+    ]).then(([j, i]) => {
       setJobs(Array.isArray(j) ? j : []);
       setInvoices(Array.isArray(i) ? i : []);
-      setInventory(Array.isArray(inv) ? inv : []);
       setLoading(false);
     });
   }, []);
@@ -338,8 +400,15 @@ export default function AdminDashboard() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="text-4xl mb-3">🔧</div>
-          <p className="text-gray-500">Loading command center...</p>
+          <div className="animate-pulse space-y-3 max-w-md mx-auto">
+            <div className="h-8 bg-gray-200 rounded w-48" />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="h-24 bg-gray-200 rounded-xl" />
+              <div className="h-24 bg-gray-200 rounded-xl" />
+              <div className="h-24 bg-gray-200 rounded-xl" />
+            </div>
+            <div className="h-40 bg-gray-200 rounded-xl" />
+          </div>
         </div>
       </div>
     );
@@ -373,10 +442,14 @@ export default function AdminDashboard() {
         <AdminDashboardView
           jobs={jobs}
           invoices={invoices}
-          inventory={inventory}
           showNewJob={showNewJob}
           setShowNewJob={setShowNewJob}
         />
+      )}
+
+      {/* System card — only for IT role viewing as IT */}
+      {realRole === "it" && effectiveRole !== "technician" && viewAs === "it" && (
+        <SystemCard />
       )}
     </>
   );

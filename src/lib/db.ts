@@ -119,6 +119,8 @@ export async function ensureSchema(): Promise<void> {
     "ALTER TABLE jobs ADD COLUMN warranty_reimbursement REAL",
     "ALTER TABLE jobs ADD COLUMN assigned_to TEXT",
     "ALTER TABLE jobs ADD COLUMN follow_up_required INTEGER DEFAULT 0",
+    "ALTER TABLE customers ADD COLUMN notes TEXT",
+    "ALTER TABLE customers ADD COLUMN preferred_contact TEXT",
   ];
   for (const sql of v2Migrations) {
     try { await client.execute(sql); } catch { /* column already exists */ }
