@@ -6,30 +6,51 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import type { Job, JobItem, Invoice, PriceListItem } from "@/lib/types";
 
-const V2_STATUSES = ["New", "Scheduled", "En Route", "On Scene", "Complete", "Invoiced", "Paid"] as const;
+const V3_STATUSES = ["Lead", "Work Order", "En Route", "Working", "Job Done", "Final Invoice", "Payment", "Review"] as const;
+
 const STATUS_COLORS: Record<string, string> = {
-  New: "bg-gray-200 text-gray-800",
-  Scheduled: "bg-blue-200 text-blue-800",
-  "En Route": "bg-yellow-200 text-yellow-800",
-  "On Scene": "bg-orange-200 text-orange-800",
-  Complete: "bg-green-200 text-green-800",
-  Invoiced: "bg-purple-200 text-purple-800",
-  Paid: "bg-teal-200 text-teal-800",
-  // Legacy
   Lead: "bg-gray-200 text-gray-800",
-  Called: "bg-blue-100 text-blue-700",
-  "In Progress": "bg-yellow-100 text-yellow-800",
-  Completed: "bg-green-100 text-green-700",
+  "Work Order": "bg-blue-200 text-blue-800",
+  "En Route": "bg-yellow-200 text-yellow-800",
+  Working: "bg-orange-200 text-orange-800",
+  "Job Done": "bg-green-200 text-green-800",
+  "Final Invoice": "bg-purple-200 text-purple-800",
+  Payment: "bg-teal-200 text-teal-800",
+  Review: "bg-indigo-200 text-indigo-800",
 };
+
 const EQUIPMENT_TYPES = ["HVAC", "Appliance", "Commercial Kitchen", "Handyman", "Warranty"];
+const LEAD_SOURCES: Record<string, string> = {
+  direct: "Direct Call",
+  facebook: "Facebook",
+  google_search: "Google Search",
+  google_maps: "Google Maps",
+  referral: "Referral",
+  website: "Website Contact Form",
+  other: "Other",
+};
 const GOOGLE_REVIEW_URL = "https://search.google.com/local/writereview?placeid=ChIJaxfsFK2hhkYRlSUOXJr5gfk";
 
-function StatusPill({ status }: { status: string }) {
-  return (
-    <span className={`px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap ${STATUS_COLORS[status] || "bg-gray-100 text-gray-700"}`}>
-      {status}
-    </span>
-  );
+/** Map legacy statuses to v3 pipeline for display */
+function mapStatus(s: string): string {
+  switch (s) {
+    case "Called":
+    case "Scheduled":
+    case "New":
+      return "Work Order";
+    case "In Progress":
+    case "On Scene":
+      return "Working";
+    case "Completed":
+    case "Complete":
+      return "Job Done";
+    case "Invoiced":
+      return "Final Invoice";
+    case "Paid":
+      return "Payment";
+    default:
+      return s;
+  }
 }
 
 export default function WorkOrderPage() {
@@ -41,13 +62,15 @@ export default function WorkOrderPage() {
   const [priceList, setPriceList] = useState<PriceListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [addingItem, setAddingItem] = useState(false);
   const [newItem, setNewItem] = useState({ description: "", quantity: 1, unitPrice: 0, itemType: "Labor" });
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [priceSearch, setPriceSearch] = useState("");
+  const [includeTax, setIncludeTax] = useState(false);
+  const [taxRate, setTaxRate] = useState(7);
   const saveTimer = useRef<NodeJS.Timeout | null>(null);
 
   const load = useCallback(async () => {
@@ -75,10 +98,10 @@ export default function WorkOrderPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Auto-save with debounce
   function autoSave(updates: Partial<Job>) {
     const newJob = { ...job, ...updates } as Job;
     setJob(newJob);
+    setDirty(true);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveJob(updates), 1000);
   }
@@ -93,6 +116,26 @@ export default function WorkOrderPage() {
       });
       const updated = await res.json();
       setJob(updated);
+      setDirty(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveAll() {
+    if (!job) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/jobs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...job, id }),
+      });
+      const updated = await res.json();
+      setJob(updated);
+      setDirty(false);
+      toast.success("Saved");
     } finally {
       setSaving(false);
     }
@@ -100,11 +143,20 @@ export default function WorkOrderPage() {
 
   async function handleStatusChange(newStatus: string) {
     if (!job) return;
-    // Log notification stub
+    const currentIdx = V3_STATUSES.indexOf(mapStatus(job.status) as typeof V3_STATUSES[number]);
+    const newIdx = V3_STATUSES.indexOf(newStatus as typeof V3_STATUSES[number]);
+    const isBackward = newIdx < currentIdx;
+
+    const message = isBackward
+      ? `Move back to ${newStatus}? This may undo notifications.`
+      : `Advance to ${newStatus}?`;
+
+    if (!confirm(message)) return;
+
     console.log(`[Notification] Status changed to ${newStatus} for job ${job.jobNumber}`);
     if (newStatus === "En Route") console.log(`[Notification] Customer ${job.customerName}: Technician is en route`);
-    if (newStatus === "On Scene") console.log(`[Notification] Customer ${job.customerName}: Technician arrived`);
-    if (newStatus === "Complete") console.log(`[Notification] Customer ${job.customerName}: Work complete`);
+    if (newStatus === "Working") console.log(`[Notification] Customer ${job.customerName}: Technician arrived`);
+    if (newStatus === "Job Done") console.log(`[Notification] Customer ${job.customerName}: Work complete`);
 
     const res = await fetch(`/api/admin/jobs/${id}/status`, {
       method: "PATCH",
@@ -113,15 +165,16 @@ export default function WorkOrderPage() {
     });
     const updated = await res.json();
     setJob(updated);
-    // Toast notification
+
     const toastMessages: Record<string, string> = {
-      "New": "Job marked as New",
-      "Scheduled": "Job scheduled",
+      Lead: "Job marked as Lead",
+      "Work Order": "Work order created",
       "En Route": "En route — customer notified",
-      "On Scene": "On scene — customer notified",
-      "Complete": "Job complete — ready for invoice",
-      "Invoiced": "Invoice generated",
-      "Paid": "Payment received!",
+      Working: "Working — customer notified",
+      "Job Done": "Job complete — ready for invoice",
+      "Final Invoice": "Invoice step",
+      Payment: "Payment received!",
+      Review: "Ready for review",
     };
     toast.success(toastMessages[newStatus] || `Status: ${newStatus}`);
   }
@@ -130,7 +183,7 @@ export default function WorkOrderPage() {
     if (!job) return;
     setAiLoading(true);
     try {
-      const res = await fetch("/api/admin/ai-suggest", {
+      const res = await fetch(`/api/admin/jobs/${id}/ai-suggest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -140,14 +193,9 @@ export default function WorkOrderPage() {
         }),
       });
       const data = await res.json();
-      const suggestions = data.suggestions || "No suggestions available at this time.";
-      setJob(prev => prev ? { ...prev, aiSuggestions: suggestions } : prev);
-      // Cache in DB
-      await fetch("/api/admin/jobs", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, aiSuggestions: suggestions }),
-      });
+      const suggestions = data.suggestions || [];
+      const suggestionsStr = Array.isArray(suggestions) ? suggestions.join("\n") : suggestions;
+      setJob(prev => prev ? { ...prev, aiSuggestions: suggestionsStr } : prev);
     } catch {
       setJob(prev => prev ? { ...prev, aiSuggestions: "Failed to generate suggestions. Try again later." } : prev);
     } finally {
@@ -186,123 +234,146 @@ export default function WorkOrderPage() {
     });
     const inv = await res.json();
     setInvoice(inv);
-    setJob(prev => prev ? { ...prev, status: "Invoiced" } : prev);
+    setJob(prev => prev ? { ...prev, status: "Final Invoice" as Job["status"] } : prev);
     setGeneratingInvoice(false);
-  }
-
-  async function toggleReviewSent(sent: boolean) {
-    const res = await fetch("/api/admin/jobs", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, googleReviewSent: sent }),
-    });
-    const updated = await res.json();
-    setJob(updated);
-  }
-
-  function copyToClipboard(text: string, key: string) {
-    navigator.clipboard.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(null), 2000);
+    toast.success("Invoice generated!");
   }
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="text-center"><div className="text-4xl mb-2">🔧</div><p className="text-gray-500">Loading work order...</p></div>
+      <div className="text-center"><p className="text-gray-500">Loading work order...</p></div>
     </div>
   );
 
   if (!job) return null;
 
-  const total = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-  const showInvoiceBtn = job.status === "Complete" || job.status === "Completed";
-  const showInvoiceSection = ["Complete", "Completed", "Invoiced", "Paid"].includes(job.status);
-  const showReviewPrompt = ["Complete", "Completed", "Paid"].includes(job.status);
+  const displayStatus = mapStatus(job.status);
+  const currentIdx = V3_STATUSES.indexOf(displayStatus as typeof V3_STATUSES[number]);
+  const subtotal = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+  const taxAmount = includeTax ? subtotal * (taxRate / 100) : 0;
+  const grandTotal = subtotal + taxAmount;
+  const showInvoiceBtn = displayStatus === "Job Done";
+  const showPaymentReview = displayStatus === "Payment";
   const reviewMessage = `Hi ${job.customerName}! Thanks for calling Grease & Threads. If you have a moment, a Google review really helps: ${GOOGLE_REVIEW_URL} — Thanks! -Joe`;
-  const trackUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/track/${job.trackingToken}`
-    : `/track/${job.trackingToken}`;
 
   const filteredPriceList = priceSearch
     ? priceList.filter(p => p.name.toLowerCase().includes(priceSearch.toLowerCase()))
     : priceList;
 
-  // Map legacy statuses to v2 for the status bar display
-  function getDisplayStatus(s: string): string {
-    if (s === "Lead") return "New";
-    if (s === "In Progress") return "On Scene";
-    if (s === "Completed") return "Complete";
-    return s;
-  }
-  const displayStatus = getDisplayStatus(job.status);
-
   return (
     <div className="max-w-2xl mx-auto pb-28">
-      {/* Back */}
-      <div className="mb-3">
-        <Link href="/admin/jobs" className="text-blue-600 text-sm flex items-center gap-1">
-          ← All Jobs
+      {/* 1. Top bar (sticky) */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-100 -mx-4 px-4 py-2 flex items-center gap-3 mb-3">
+        <Link href="/admin/jobs" className="text-blue-600 text-lg p-2 -ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
+          ←
         </Link>
+        <div className="flex-1 min-w-0 text-center">
+          <p className="text-xs text-gray-400 font-mono">{job.jobNumber}</p>
+          <h1 className="text-base font-bold text-navy truncate">{job.customerName}</h1>
+        </div>
+        <button
+          onClick={saveAll}
+          className="relative bg-navy text-white font-semibold px-4 py-2 rounded-lg text-sm active:scale-95 min-h-[44px]"
+        >
+          Save
+          {dirty && <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber rounded-full border-2 border-white" />}
+        </button>
       </div>
 
-      {/* Status Bar */}
+      {/* 2. Status Pipeline Bar */}
       <div data-testid="status-bar" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-3 overflow-x-auto">
         <div className="flex gap-1.5 min-w-max">
-          {V2_STATUSES.map((s, i) => {
+          {V3_STATUSES.map((s, i) => {
             const isActive = displayStatus === s;
-            const isPast = V2_STATUSES.indexOf(displayStatus as typeof V2_STATUSES[number]) > i;
+            const isPast = currentIdx > i;
             return (
               <button
                 key={s}
                 onClick={() => handleStatusChange(s)}
                 className={`px-3 py-2.5 rounded-lg text-xs font-bold transition-all active:scale-95 flex-shrink-0 ${
                   isActive
-                    ? STATUS_COLORS[s] + " ring-2 ring-offset-1 ring-amber"
+                    ? (STATUS_COLORS[s] || "bg-gray-200 text-gray-800") + " ring-2 ring-offset-1 ring-navy"
                     : isPast
-                    ? "bg-gray-100 text-gray-500 line-through"
+                    ? "bg-gray-100 text-gray-500"
                     : "bg-gray-50 text-gray-400 hover:bg-gray-100"
                 }`}
               >
-                {s}
+                {isPast && "✓ "}{s}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Header - Customer Info */}
+      {/* 3. Customer Info card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
-        <div className="flex justify-between items-start mb-2">
+        <h2 className="font-bold text-navy text-sm uppercase tracking-wide mb-3">Customer</h2>
+        <div className="space-y-3">
           <div>
-            <p className="text-xs text-gray-400 font-mono">{job.jobNumber}</p>
-            <h1 className="text-xl font-black text-navy">{job.customerName}</h1>
+            <label className="text-xs text-gray-500 block mb-1">Name</label>
+            <input
+              value={job.customerName || ""}
+              onChange={e => autoSave({ customerName: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2.5 text-sm"
+            />
           </div>
-          <StatusPill status={job.status} />
-        </div>
-        <div className="space-y-2">
-          <a href={`tel:${job.customerPhone}`}
-            className="flex items-center gap-2 text-blue-600 font-semibold text-lg py-2 active:bg-blue-50 rounded-lg -mx-2 px-2">
-            📞 {job.customerPhone}
-          </a>
-          {job.address && (
-            <a href={`https://maps.google.com/?q=${encodeURIComponent(job.address)}`}
-              target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-2 text-blue-600 py-2 active:bg-blue-50 rounded-lg -mx-2 px-2">
-              📍 {job.address}
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Phone</label>
+            <a href={`tel:${job.customerPhone}`}
+              className="flex items-center gap-2 text-blue-600 font-semibold text-lg py-2 active:bg-blue-50 rounded-lg -mx-2 px-2">
+              {job.customerPhone}
             </a>
-          )}
-          <div className="flex flex-wrap gap-2 text-sm text-gray-500">
-            <span>{job.serviceType}</span>
-            <span>·</span>
-            <span>{new Date(job.createdAt).toLocaleDateString()}</span>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Email</label>
+            <input
+              type="email"
+              value={job.customerEmail || ""}
+              onChange={e => autoSave({ customerEmail: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2.5 text-sm"
+              placeholder="Email"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Address</label>
+            <input
+              value={job.address || ""}
+              onChange={e => autoSave({ address: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2.5 text-sm"
+              placeholder="Service address"
+            />
+            {job.address && (
+              <a
+                href={`https://maps.google.com/?q=${encodeURIComponent(job.address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-1 text-xs text-blue-600 font-medium"
+              >
+                Open in Maps
+              </a>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Job Description + Equipment */}
+      {/* 4. Job Details card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
         <h2 className="font-bold text-navy text-sm uppercase tracking-wide mb-3">Job Details</h2>
         <div className="space-y-3">
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Service Type</label>
+            <select
+              value={job.serviceType || ""}
+              onChange={e => autoSave({ serviceType: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2.5 text-sm"
+            >
+              <option value="HVAC">HVAC</option>
+              <option value="Appliance Repair">Appliance Repair</option>
+              <option value="Commercial Kitchen">Commercial Kitchen</option>
+              <option value="Handyman">Handyman</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
           <div>
             <label className="text-xs text-gray-500 block mb-1">Description</label>
             <textarea
@@ -338,7 +409,7 @@ export default function WorkOrderPage() {
                   href={`https://www.google.com/search?q=${encodeURIComponent((job.modelNumber || "") + " service manual")}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="bg-navy text-white px-3 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap active:scale-95"
+                  className="bg-navy text-white px-3 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap active:scale-95 min-h-[44px] flex items-center"
                 >
                   Find Manual
                 </a>
@@ -355,48 +426,76 @@ export default function WorkOrderPage() {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Assigned To</label>
-            <select
-              value={job.assignedTo || ""}
-              onChange={e => autoSave({ assignedTo: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2.5 text-sm"
-            >
-              <option value="">Unassigned</option>
-              <option value="joe">Joe</option>
-              <option value="anthoney">Anthoney</option>
-            </select>
+            <label className="text-xs text-gray-500 block mb-1">Lead Source</label>
+            <p className="text-sm text-gray-700 px-1">{LEAD_SOURCES[job.leadSource || ""] || job.leadSource || "—"}</p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Internal Notes</label>
+            <textarea
+              value={job.notes || ""}
+              onChange={e => autoSave({ notes: e.target.value })}
+              rows={3}
+              className="w-full border rounded-lg px-3 py-2.5 text-sm resize-none"
+              placeholder="Internal notes (not shown to customer)..."
+            />
+          </div>
+          {/* Flags */}
+          <div className="space-y-2 pt-2 border-t border-gray-100">
+            <label className="flex items-center gap-3 py-1 cursor-pointer">
+              <input type="checkbox" checked={job.warrantyFlag || false}
+                onChange={e => autoSave({ warrantyFlag: e.target.checked })}
+                className="w-5 h-5 accent-amber" />
+              <span className="text-sm text-gray-700">Rely Home Warranty</span>
+            </label>
+            <label className="flex items-center gap-3 py-1 cursor-pointer">
+              <input type="checkbox" checked={job.subscriptionFlag || false}
+                onChange={e => autoSave({ subscriptionFlag: e.target.checked })}
+                className="w-5 h-5 accent-amber" />
+              <span className="text-sm text-gray-700">Subscription Visit</span>
+            </label>
+            <label className="flex items-center gap-3 py-1 cursor-pointer">
+              <input type="checkbox" checked={job.followUpRequired || false}
+                onChange={e => autoSave({ followUpRequired: e.target.checked })}
+                className="w-5 h-5 accent-amber" />
+              <span className="text-sm text-gray-700">Follow-up Required</span>
+            </label>
           </div>
         </div>
       </div>
 
-      {/* AI Diagnostic Panel */}
+      {/* 5. AI Diagnostic Panel */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-3 overflow-hidden">
         <button
           onClick={() => setAiOpen(!aiOpen)}
           className="w-full px-4 py-3 flex items-center justify-between active:bg-gray-50"
         >
-          <span className="font-bold text-navy text-sm uppercase tracking-wide">🤖 AI Diagnostics</span>
+          <span className="font-bold text-navy text-sm uppercase tracking-wide">AI Suggestions — verify with your own diagnosis</span>
           <span className="text-gray-400 text-lg">{aiOpen ? "▲" : "▼"}</span>
         </button>
         {aiOpen && (
           <div className="px-4 pb-4 border-t border-gray-100">
-            <p className="text-xs text-amber-600 font-medium mt-3 mb-2">AI Suggestions — verify with your own diagnosis</p>
             {job.aiSuggestions ? (
-              <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap">
-                {job.aiSuggestions}
+              <div className="bg-gray-50 rounded-lg p-3 mt-3 text-sm text-gray-700">
+                <ul className="list-disc list-inside space-y-1">
+                  {job.aiSuggestions.split("\n").filter(Boolean).map((line, i) => (
+                    <li key={i}>{line.replace(/^[-•*]\s*/, "")}</li>
+                  ))}
+                </ul>
               </div>
             ) : aiLoading ? (
-              <div className="bg-gray-50 rounded-lg p-4 text-center text-sm text-gray-500">
+              <div className="bg-gray-50 rounded-lg p-4 mt-3 text-center text-sm text-gray-500">
                 <div className="animate-spin inline-block w-5 h-5 border-2 border-amber border-t-transparent rounded-full mb-2" />
                 <p>Generating suggestions...</p>
               </div>
-            ) : (
+            ) : (job.problemDescription || job.modelNumber) ? (
               <button
                 onClick={fetchAiSuggestions}
-                className="w-full bg-amber/10 text-amber-700 font-semibold py-3 rounded-lg text-sm active:scale-95"
+                className="w-full mt-3 bg-amber/10 text-amber-700 font-semibold py-3 rounded-lg text-sm active:scale-95 min-h-[44px]"
               >
-                Generate AI Suggestions
+                Get AI Suggestions
               </button>
+            ) : (
+              <p className="text-xs text-gray-400 mt-3">Add a problem description or model number to get AI suggestions.</p>
             )}
             {job.aiSuggestions && (
               <button
@@ -410,7 +509,7 @@ export default function WorkOrderPage() {
         )}
       </div>
 
-      {/* Parts & Labor */}
+      {/* 6. Parts & Labor */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-bold text-navy text-sm uppercase tracking-wide">Parts & Labor</h2>
@@ -430,26 +529,35 @@ export default function WorkOrderPage() {
                 onChange={e => setPriceSearch(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2.5 text-sm mb-2"
               />
+              {filteredPriceList.length > 0 && (
+                <select
+                  onChange={e => {
+                    const pl = priceList.find(p => p.name === e.target.value);
+                    if (pl) {
+                      setNewItem(n => ({ ...n, description: pl.name, unitPrice: pl.defaultPrice, itemType: pl.itemType || "Labor" }));
+                    }
+                    e.target.value = "";
+                    setPriceSearch("");
+                  }}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm"
+                >
+                  <option value="">Quick add from price list...</option>
+                  {filteredPriceList.map(p => (
+                    <option key={p.id} value={p.name}>{p.name} (${p.defaultPrice})</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Type</label>
               <select
                 value={newItem.itemType}
-                onChange={e => {
-                  const pl = priceList.find(p => p.name === e.target.value);
-                  if (pl) {
-                    setNewItem(n => ({ ...n, itemType: e.target.value, description: pl.name, unitPrice: pl.defaultPrice }));
-                  } else {
-                    setNewItem(n => ({ ...n, itemType: e.target.value }));
-                  }
-                  setPriceSearch("");
-                }}
+                onChange={e => setNewItem(n => ({ ...n, itemType: e.target.value }))}
                 className="w-full border rounded-lg px-3 py-2.5 text-sm"
-                size={Math.min(filteredPriceList.length + 3, 6)}
               >
-                <option value="">— Select from price list —</option>
-                {filteredPriceList.map(p => (
-                  <option key={p.id} value={p.name}>{p.name} (${p.defaultPrice})</option>
-                ))}
-                <option value="Labor">Custom Labor</option>
-                <option value="Part">Custom Part</option>
+                <option value="Labor">Labor</option>
+                <option value="Part">Part</option>
+                <option value="Diagnostic Fee">Diagnostic Fee</option>
                 <option value="Other">Other</option>
               </select>
             </div>
@@ -480,65 +588,59 @@ export default function WorkOrderPage() {
         {items.length === 0 ? (
           <p className="text-gray-400 text-sm text-center py-6">No items yet — tap Add Item to log parts & labor</p>
         ) : (
-          <div className="space-y-2">
-            {items.map(item => (
-              <div key={item.id} className="flex items-center gap-2 py-3 border-b border-gray-50 last:border-0">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-navy truncate">{item.description}</p>
-                  <p className="text-xs text-gray-400">{item.quantity} × ${item.unitPrice.toFixed(2)}</p>
+          <div>
+            {/* Table header */}
+            <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-2 text-xs text-gray-400 uppercase tracking-wide pb-2 border-b border-gray-100">
+              <span>Description</span>
+              <span>Type</span>
+              <span className="text-right">Qty</span>
+              <span className="text-right">Price</span>
+              <span className="text-right">Total</span>
+              <span></span>
+            </div>
+            <div className="space-y-0">
+              {items.map(item => (
+                <div key={item.id} className="flex items-center gap-2 py-3 border-b border-gray-50 last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-navy truncate">{item.description}</p>
+                    <p className="text-xs text-gray-400">{item.itemType} · {item.quantity} × ${item.unitPrice.toFixed(2)}</p>
+                  </div>
+                  <span className="font-bold text-navy text-sm whitespace-nowrap">
+                    ${(item.quantity * item.unitPrice).toFixed(2)}
+                  </span>
+                  <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 text-2xl leading-none p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">×</button>
                 </div>
-                <span className="font-bold text-navy text-sm whitespace-nowrap">
-                  ${(item.quantity * item.unitPrice).toFixed(2)}
-                </span>
-                <button onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-600 text-2xl leading-none p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">×</button>
+              ))}
+            </div>
+            {/* Totals */}
+            <div className="pt-3 border-t border-gray-200 space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Subtotal</span>
+                <span className="font-medium text-navy">${subtotal.toFixed(2)}</span>
               </div>
-            ))}
-            <div className="flex justify-between items-center pt-3 border-t border-gray-200">
-              <span className="font-bold text-navy">Total</span>
-              <span className="font-black text-xl text-navy">${total.toFixed(2)}</span>
+              <div className="flex items-center justify-between text-sm">
+                <label className="flex items-center gap-2 text-gray-500 cursor-pointer">
+                  <input type="checkbox" checked={includeTax} onChange={e => setIncludeTax(e.target.checked)} className="accent-amber" />
+                  Tax
+                  {includeTax && (
+                    <input type="number" min="0" max="100" step="0.1" value={taxRate}
+                      onChange={e => setTaxRate(parseFloat(e.target.value) || 0)}
+                      className="w-14 border rounded px-1 py-0.5 text-xs ml-1" />
+                  )}
+                  {includeTax && <span className="text-xs">%</span>}
+                </label>
+                {includeTax && <span className="font-medium text-navy">${taxAmount.toFixed(2)}</span>}
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                <span className="font-bold text-navy">Total</span>
+                <span className="font-black text-xl text-navy">${grandTotal.toFixed(2)}</span>
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Internal Notes */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
-        <h2 className="font-bold text-navy text-sm uppercase tracking-wide mb-2">Internal Notes</h2>
-        <textarea
-          value={job.notes || ""}
-          onChange={e => autoSave({ notes: e.target.value })}
-          rows={3}
-          className="w-full border rounded-lg px-3 py-2.5 text-sm resize-none"
-          placeholder="Internal notes (not shown to customer)..."
-        />
-      </div>
-
-      {/* Flags */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
-        <h2 className="font-bold text-navy text-sm uppercase tracking-wide mb-3">Flags</h2>
-        <div className="space-y-3">
-          <label className="flex items-center gap-3 py-1 cursor-pointer">
-            <input type="checkbox" checked={job.warrantyFlag || false}
-              onChange={e => autoSave({ warrantyFlag: e.target.checked })}
-              className="w-5 h-5 accent-amber" />
-            <span className="text-sm text-gray-700">Rely Home Warranty</span>
-          </label>
-          <label className="flex items-center gap-3 py-1 cursor-pointer">
-            <input type="checkbox" checked={job.subscriptionFlag || false}
-              onChange={e => autoSave({ subscriptionFlag: e.target.checked })}
-              className="w-5 h-5 accent-amber" />
-            <span className="text-sm text-gray-700">Subscription Visit</span>
-          </label>
-          <label className="flex items-center gap-3 py-1 cursor-pointer">
-            <input type="checkbox" checked={job.followUpRequired || false}
-              onChange={e => autoSave({ followUpRequired: e.target.checked })}
-              className="w-5 h-5 accent-amber" />
-            <span className="text-sm text-gray-700">Follow-up Required</span>
-          </label>
-        </div>
-      </div>
-
-      {/* Warranty Fields (shown when warranty flag is checked) */}
+      {/* 7. Warranty fields (only when flag checked) */}
       {job.warrantyFlag && (
         <div className="bg-white rounded-xl shadow-sm border-2 border-purple-200 p-4 mb-3">
           <h2 className="font-bold text-purple-700 text-sm uppercase tracking-wide mb-3">Warranty Details</h2>
@@ -557,13 +659,18 @@ export default function WorkOrderPage() {
             </div>
             <div>
               <label className="text-xs text-gray-500 block mb-1">Coverage</label>
-              <select value={job.warrantyCovered || ""}
-                onChange={e => autoSave({ warrantyCovered: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2.5 text-sm">
-                <option value="">Not determined</option>
-                <option value="covered">Covered</option>
-                <option value="not_covered">Not Covered</option>
-              </select>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="warranty" value="covered" checked={job.warrantyCovered === "covered"}
+                    onChange={e => autoSave({ warrantyCovered: e.target.value })} className="accent-amber" />
+                  <span className="text-sm">Covered</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="warranty" value="not_covered" checked={job.warrantyCovered === "not_covered"}
+                    onChange={e => autoSave({ warrantyCovered: e.target.value })} className="accent-amber" />
+                  <span className="text-sm">Not Covered</span>
+                </label>
+              </div>
             </div>
             <div>
               <label className="text-xs text-gray-500 block mb-1">Reimbursement Amount</label>
@@ -575,89 +682,79 @@ export default function WorkOrderPage() {
         </div>
       )}
 
-      {/* Invoice Section */}
-      {showInvoiceSection && (
+      {/* Invoice Section (when invoice exists) */}
+      {invoice && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
           <h2 className="font-bold text-navy text-sm uppercase tracking-wide mb-3">Invoice</h2>
-          {invoice ? (
-            <div className="space-y-3">
-              <div className="bg-gray-50 rounded-lg p-3 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Invoice #</span><span className="font-bold">{invoice.invoiceNumber}</span></div>
-                <div className="flex justify-between mt-1"><span className="text-gray-500">Total</span><span className="font-black text-lg text-navy">${invoice.total.toFixed(2)}</span></div>
-                <div className="flex justify-between mt-1"><span className="text-gray-500">Status</span><StatusPill status={invoice.status} /></div>
-              </div>
-              <div className="flex gap-2">
-                <Link href={`/invoice/${invoice.id}`} target="_blank"
-                  className="flex-1 bg-navy text-white font-bold py-3 rounded-xl text-center text-sm min-h-[44px] flex items-center justify-center">
-                  View Invoice
-                </Link>
-                <a href={`/api/admin/invoices/${invoice.id}/pdf`} target="_blank"
-                  className="flex-1 bg-gray-100 text-navy font-bold py-3 rounded-xl text-center text-sm min-h-[44px] flex items-center justify-center">
-                  PDF
-                </a>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-500">Job complete. Generate invoice from {items.length} item(s) totaling ${total.toFixed(2)}.</p>
-              <button onClick={generateInvoice} disabled={generatingInvoice || items.length === 0}
-                className="w-full bg-amber text-white font-black py-4 rounded-xl text-lg disabled:opacity-50 active:scale-95 min-h-[56px]">
-                {generatingInvoice ? "Generating..." : "Generate Invoice"}
-              </button>
-            </div>
-          )}
+          <div className="bg-gray-50 rounded-lg p-3 text-sm">
+            <div className="flex justify-between"><span className="text-gray-500">Invoice #</span><span className="font-bold">{invoice.invoiceNumber}</span></div>
+            <div className="flex justify-between mt-1"><span className="text-gray-500">Total</span><span className="font-black text-lg text-navy">${invoice.total.toFixed(2)}</span></div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <Link href={`/invoice/${invoice.id}`} target="_blank"
+              className="flex-1 bg-navy text-white font-bold py-3 rounded-xl text-center text-sm min-h-[44px] flex items-center justify-center">
+              View Invoice
+            </Link>
+            <a href={`/api/admin/invoices/${invoice.id}/pdf`} target="_blank"
+              className="flex-1 bg-gray-100 text-navy font-bold py-3 rounded-xl text-center text-sm min-h-[44px] flex items-center justify-center">
+              PDF
+            </a>
+          </div>
         </div>
       )}
 
-      {/* Google Review Prompt */}
-      {showReviewPrompt && (
+      {/* Google Review Prompt (when Payment status) */}
+      {showPaymentReview && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
           <h2 className="font-bold text-navy text-sm uppercase tracking-wide mb-3">Google Review</h2>
           <div className="bg-gray-50 rounded-lg p-3 mb-3">
             <p className="text-sm text-gray-700 leading-relaxed">{reviewMessage}</p>
           </div>
-          <div className="flex gap-2 mb-3">
-            <button onClick={() => copyToClipboard(reviewMessage, "review")}
-              className="flex-1 bg-amber text-white font-bold py-2.5 rounded-lg text-sm active:scale-95 min-h-[44px]">
-              {copied === "review" ? "Copied!" : "Copy Message"}
-            </button>
-          </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" checked={job.googleReviewSent}
-              onChange={e => toggleReviewSent(e.target.checked)}
-              className="w-5 h-5 accent-amber" />
-            <span className="text-sm text-gray-700">Mark Review Sent</span>
-          </label>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(reviewMessage);
+              toast.success("Review message copied!");
+            }}
+            className="w-full bg-amber text-white font-bold py-2.5 rounded-lg text-sm active:scale-95 min-h-[44px]"
+          >
+            Copy Review Message
+          </button>
         </div>
       )}
 
-      {/* Tracking Link */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
-        <h2 className="font-bold text-navy text-sm uppercase tracking-wide mb-3">Customer Tracking Link</h2>
-        <div className="bg-gray-50 rounded-lg p-3 mb-3">
-          <p className="text-xs font-mono text-gray-600 break-all">{trackUrl}</p>
-        </div>
-        <button onClick={() => copyToClipboard(trackUrl, "track")}
-          className="w-full bg-gray-100 text-navy font-bold py-3 rounded-xl text-sm active:scale-95 min-h-[44px]">
-          {copied === "track" ? "Copied!" : "Copy Tracking Link"}
-        </button>
-      </div>
-
-      {/* Sticky Bottom Bar */}
+      {/* 8. Sticky bottom action bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20 safe-area-pb md:left-64">
         <div className="max-w-2xl mx-auto px-4 py-3 flex gap-2">
-          <span className={`text-xs self-center px-2 py-1 rounded ${saving ? "bg-amber/20 text-amber-700" : "bg-green-100 text-green-700"}`}>
-            {saving ? "Saving..." : "Saved"}
-          </span>
+          <button
+            onClick={saveAll}
+            className="relative bg-navy text-white font-bold py-3 px-4 rounded-xl text-sm active:scale-95 min-h-[44px]"
+          >
+            Save
+            {dirty && <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber rounded-full border-2 border-white" />}
+          </button>
           <a href={`tel:${job.customerPhone}`}
-            className="bg-navy text-white font-bold py-3 px-4 rounded-xl text-sm active:scale-95 min-h-[44px] flex items-center gap-1">
-            📞 Call
+            className="bg-gray-100 text-navy font-bold py-3 px-4 rounded-xl text-sm active:scale-95 min-h-[44px] flex items-center gap-1">
+            Call
           </a>
           {showInvoiceBtn && !invoice && (
             <button onClick={generateInvoice} disabled={generatingInvoice || items.length === 0}
               className="flex-1 bg-amber text-white font-black py-3 rounded-xl text-sm disabled:opacity-50 active:scale-95 min-h-[44px]">
-              {generatingInvoice ? "..." : "Generate Invoice"}
+              {generatingInvoice ? "Generating..." : "Generate Invoice"}
             </button>
+          )}
+          {displayStatus === "Review" && (
+            <button
+              onClick={() => toast.success("Marked as reviewed")}
+              className="flex-1 bg-indigo-600 text-white font-black py-3 rounded-xl text-sm active:scale-95 min-h-[44px]"
+            >
+              Mark as Reviewed
+            </button>
+          )}
+          {invoice && (
+            <Link href={`/invoice/${invoice.id}`} target="_blank"
+              className="bg-purple-100 text-purple-700 font-bold py-3 px-4 rounded-xl text-sm min-h-[44px] flex items-center">
+              View Invoice
+            </Link>
           )}
         </div>
       </div>

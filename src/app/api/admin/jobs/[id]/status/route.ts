@@ -51,7 +51,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // Fire notifications based on status change
   const oldStatus = oldJob?.status;
   if (oldStatus !== status) {
-    // Log toast notifications
+    // Log toast notifications — supports both v3 and legacy statuses
     switch (status) {
       case "En Route":
         await dbLogNotification({ jobId: id, recipient: "joe", type: "toast", event: "en_route" });
@@ -59,11 +59,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           sendCustomerEmail(id, "en_route", job.customerEmail, job.customerName);
         }
         break;
+      case "Working":
       case "On Scene":
         if (job.customerEmail) {
           sendCustomerEmail(id, "on_scene", job.customerEmail, job.customerName);
         }
         break;
+      case "Job Done":
       case "Complete":
       case "Completed":
         await dbLogNotification({ jobId: id, recipient: "joe", type: "toast", event: "complete" });
@@ -71,12 +73,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           sendCustomerEmail(id, "complete", job.customerEmail, job.customerName);
         }
         break;
+      case "Final Invoice":
       case "Invoiced":
         await dbLogNotification({ jobId: id, recipient: "joe", type: "toast", event: "invoice_sent" });
         if (job.customerEmail) {
           sendCustomerEmail(id, "invoice_sent", job.customerEmail, job.customerName);
         }
         break;
+      case "Payment":
       case "Paid":
         await dbLogNotification({ jobId: id, recipient: "joe", type: "toast", event: "payment_received" });
         if (job.customerEmail) {
@@ -87,7 +91,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     // Log Anthoney notifications for assigned jobs
     if (job.assignedTo === "anthoney") {
-      if (status === "Scheduled" || status === "New") {
+      if (status === "Work Order" || status === "Scheduled" || status === "New") {
         await dbLogNotification({ jobId: id, recipient: "anthoney", type: "toast", event: "job_assigned" });
       }
     }

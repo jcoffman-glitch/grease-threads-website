@@ -1,4 +1,22 @@
-export type JobStatus = "New" | "Scheduled" | "En Route" | "On Scene" | "Complete" | "Invoiced" | "Paid" | "Lead" | "Called" | "In Progress" | "Completed";
+export type JobStatus =
+  | "Lead"
+  | "Work Order"
+  | "En Route"
+  | "Working"
+  | "Job Done"
+  | "Final Invoice"
+  | "Payment"
+  | "Review"
+  // Legacy statuses (mapped on read)
+  | "New"
+  | "Scheduled"
+  | "On Scene"
+  | "Complete"
+  | "Invoiced"
+  | "Paid"
+  | "Called"
+  | "In Progress"
+  | "Completed";
 export type ServiceType = "HVAC" | "Appliance Repair" | "Commercial Kitchen" | "Handyman" | "Other";
 export type EquipmentType = "HVAC" | "Appliance" | "Commercial Kitchen" | "Handyman" | "Warranty";
 export type UserRole = "admin" | "technician" | "it" | "customer";
