@@ -267,14 +267,22 @@ export async function dbCreateJob(data: Partial<Job>): Promise<Job> {
   const jobNumber = await generateJobNumber();
   const createdAt = new Date().toISOString();
   const trackingToken = generateTrackingToken();
+
+  const customerName = data.customerName || "";
+  const customerPhone = data.customerPhone || data.phone || "";
+  const customerEmail = data.customerEmail || null;
+
+  // Upsert customer record — every job must have a customer entry
+  await upsertCustomerFromJob({ name: customerName, phone: customerPhone, email: customerEmail });
+
   await client.execute({
     sql: `INSERT INTO jobs (id, job_number, created_at, customer_name, customer_phone, customer_email, service_type, problem_description, address, scheduled_at, status, notes, tracking_token, google_review_sent, sheets_synced, lead_source)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)`,
     args: [
       id, jobNumber, createdAt,
-      data.customerName || "",
-      data.customerPhone || data.phone || "",
-      data.customerEmail || null,
+      customerName,
+      customerPhone,
+      customerEmail,
       data.serviceType || "Other",
       data.problemDescription || data.notes || "",
       data.address || null,
@@ -287,6 +295,54 @@ export async function dbCreateJob(data: Partial<Job>): Promise<Job> {
   });
   const row = await client.execute({ sql: "SELECT * FROM jobs WHERE id = ?", args: [id] });
   return rowToJob(row.rows[0]);
+}
+
+/**
+ * Upsert a customer record from job data.
+ * Matches on phone (most reliable for field-created jobs), falls back to email or name.
+ * Non-fatal: logs but does not throw on failure so job creation always succeeds.
+ */
+async function upsertCustomerFromJob(data: { name: string; phone: string; email: string | null }): Promise<void> {
+  try {
+    const { name, phone, email } = data;
+    if (!name && !phone && !email) return; // nothing to upsert
+
+    const customerId = randomUUID();
+    const now = Date.now().toString();
+
+    // Try match by phone first, then email
+    let existing = phone
+      ? await client.execute({ sql: "SELECT id FROM customers WHERE phone = ? LIMIT 1", args: [phone] })
+      : { rows: [] };
+
+    if (!existing.rows.length && email) {
+      existing = await client.execute({ sql: "SELECT id FROM customers WHERE email = ? LIMIT 1", args: [email] });
+    }
+
+    if (existing.rows.length) {
+      // Update name/email only if currently empty
+      const existingId = existing.rows[0].id as string;
+      if (email) {
+        await client.execute({
+          sql: `UPDATE customers SET email = ? WHERE id = ? AND (email IS NULL OR email = '')`,
+          args: [email, existingId],
+        });
+      }
+      if (name) {
+        await client.execute({
+          sql: `UPDATE customers SET name = ? WHERE id = ? AND (name IS NULL OR name = '')`,
+          args: [name, existingId],
+        });
+      }
+    } else {
+      await client.execute({
+        sql: `INSERT INTO customers (id, name, email, phone, created_at) VALUES (?, ?, ?, ?, ?)`,
+        args: [customerId, name, email || null, phone || null, now],
+      });
+    }
+  } catch (err) {
+    console.error("[upsertCustomerFromJob] non-fatal error:", err);
+  }
 }
 
 export async function dbUpdateJob(id: string, data: Partial<Job>): Promise<Job | null> {
