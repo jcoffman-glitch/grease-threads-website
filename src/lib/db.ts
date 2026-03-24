@@ -3,14 +3,19 @@
  * Uses Turso (libSQL) for persistent SQLite storage.
  */
 
-import { createClient } from "@libsql/client/http";
+import { createClient } from "@libsql/client";
 import { randomUUID } from "crypto";
 import type { Job, JobItem, InventoryItem, Invoice, PriceListItem, Subscription, NotificationLog } from "./types";
 
-const client = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!,
-});
+// Use a local SQLite file when running E2E tests to keep test data off production.
+const isTest = process.env.TEST_AUTH_BYPASS === "true";
+
+const client = isTest
+  ? createClient({ url: "file:/tmp/gnt-test.db" })
+  : createClient({
+      url: process.env.TURSO_DATABASE_URL!,
+      authToken: process.env.TURSO_AUTH_TOKEN!,
+    });
 
 // ── Schema Migration (idempotent) ──────────────────────────────────────────────
 
