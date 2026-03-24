@@ -67,14 +67,16 @@ export const authOptions: AuthOptions = {
           try {
             const db = getDb();
             const id = `google_${account.providerAccountId}`;
+            // Try upsert - requires unique index on email (created via migration)
             await db.execute({
               sql: `INSERT INTO customers (id, google_id, email, name, created_at)
                     VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(email) DO UPDATE SET name=excluded.name, google_id=excluded.google_id`,
-              args: [id, account.providerAccountId, user.email, user.name ?? "", Date.now()],
+              args: [id, account.providerAccountId, user.email, user.name ?? "", Date.now().toString()],
             });
-          } catch {
-            // Table may not exist yet — don't block sign-in
+          } catch (err) {
+            // Non-fatal — don't block sign-in if customer upsert fails
+            console.error("Customer upsert failed (non-fatal):", err);
           }
         }
         return true;
