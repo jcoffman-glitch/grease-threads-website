@@ -38,24 +38,6 @@ export const authOptions: AuthOptions = {
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) return null;
 
-        // Check technician credentials first
-        if (
-          process.env.TECH_USERNAME &&
-          process.env.TECH_PASSWORD &&
-          credentials.username === process.env.TECH_USERNAME
-        ) {
-          const techStored = process.env.TECH_PASSWORD.trim();
-          let techValid = false;
-          if (techStored.startsWith("$2")) {
-            techValid = await bcrypt.compare(credentials.password.trim(), techStored);
-          } else {
-            techValid = credentials.password.trim() === techStored;
-          }
-          if (!techValid) return null;
-          return { id: "2", name: "Technician", isTech: true };
-        }
-
-        // Check admin credentials
         if (credentials.username !== process.env.ADMIN_USERNAME) return null;
 
         const stored = (process.env.ADMIN_PASSWORD || "").trim();
@@ -110,12 +92,12 @@ export const authOptions: AuthOptions = {
     },
     async jwt({ token, user, account }) {
       if (user) {
-        if ((user as unknown as Record<string, unknown>).isTech) {
+        if (!user.email) {
+          // Credentials login → admin
+          token.role = "admin";
+        } else if (user.email === "anthoney@greasethreads.com") {
           token.role = "technician";
-        } else if (
-          user.email?.endsWith("@greasethreads.com") ||
-          !user.email
-        ) {
+        } else if (user.email.endsWith("@greasethreads.com")) {
           token.role = "admin";
         } else {
           token.role = "customer";
