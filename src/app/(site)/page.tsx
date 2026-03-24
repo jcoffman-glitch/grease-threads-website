@@ -43,22 +43,24 @@ const services = [
 
 const testimonials = [
   {
-    name: "Sarah M.",
-    location: "Sullivan, IN",
-    text: "He came out same day, figured out the problem in 20 minutes, and only charged me for what it actually needed. Refreshing.",
-    stars: 5,
+    name: "Miles McIntosh",
+    badge: "Local Guide",
+    text: "Shows up when he says he will. He was running behind one day but texted to let us know. Got our repairs done and installed a light in a quick efficient time.",
   },
   {
-    name: "Tom K.",
-    location: "Vincennes, IN",
-    text: "Our commercial fryer went down on a Friday night. He was there Saturday morning and had us back up by noon. Saved the weekend.",
-    stars: 5,
+    name: "Barbara Horton",
+    badge: null,
+    text: "Great guys, will do the best job keeping the prices affordable, and won't just blow smoke to get the job. They are honest and dependable to get the job done right.",
   },
   {
-    name: "Linda R.",
-    location: "Carlisle, IN",
-    text: "Most honest repairman I've dealt with in years. Told me straight what was wrong and what it would cost before touching anything.",
-    stars: 5,
+    name: "Lacey Bond",
+    badge: "Local Guide",
+    text: "Friendly, best, good repair service around!!",
+  },
+  {
+    name: "Acacia Coffman",
+    badge: null,
+    text: "Can get the job done in a timely manner and very professional",
   },
 ];
 
@@ -223,21 +225,37 @@ export default function Home() {
       {/* Testimonials */}
       <section className="py-16 md:py-20 bg-gray-50">
         <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-4">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-2">
             What Customers <span className="text-amber">Say</span>
           </h2>
-          <p className="text-center text-gray-500 text-sm mb-10">⭐ Google Reviews — Carlisle, Indiana</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <p className="text-center text-amber font-bold text-lg mb-1">5.0 ★ on Google</p>
+          <p className="text-center text-gray-500 text-sm mb-10">Real reviews from real customers</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {testimonials.map((t) => (
               <div key={t.name} className="bg-white rounded-xl p-6 shadow-md border border-gray-100">
-                <div className="text-amber text-xl mb-3">{"★".repeat(t.stars)}</div>
+                <div className="text-amber text-xl mb-3">★★★★★</div>
                 <p className="text-gray-700 italic mb-4">&ldquo;{t.text}&rdquo;</p>
-                <div>
-                  <p className="font-semibold text-navy text-sm">{t.name}</p>
-                  <p className="text-gray-400 text-xs">{t.location}</p>
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="font-semibold text-navy text-sm">{t.name}</p>
+                    <p className="text-gray-400 text-xs">
+                      {t.badge && <span className="mr-1">{t.badge} ·</span>}
+                      via Google
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}
+          </div>
+          <div className="text-center mt-8">
+            <a
+              href="https://search.google.com/local/writereview?placeid=ChIJaxfsFK2hhkYRlSUOXJr5gfk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-navy hover:bg-charcoal text-white font-semibold px-6 py-3 rounded-lg transition-colors"
+            >
+              ⭐ Leave a Review
+            </a>
           </div>
         </div>
       </section>
