@@ -8,96 +8,56 @@ async function auth() {
   return null;
 }
 
-const MOCK_SUGGESTIONS: Record<string, string[]> = {
-  HVAC: [
-    "Check thermostat settings and batteries",
-    "Inspect air filter — replace if dirty",
-    "Verify refrigerant levels",
-    "Check capacitor and contactor",
-    "Inspect blower motor and belt",
-  ],
-  Appliance: [
-    "Check power supply and outlet voltage",
-    "Inspect door seal/gasket for damage",
-    "Test control board for error codes",
-    "Check water supply lines if applicable",
-    "Inspect motor and drive belt",
-  ],
-  "Commercial Kitchen": [
-    "Check gas supply and pilot light",
-    "Inspect burner assemblies for clogs",
-    "Test thermostat calibration",
-    "Check ventilation hood and filters",
-    "Inspect electrical connections",
-  ],
-  Handyman: [
-    "Assess scope of repair needed",
-    "Check for underlying structural issues",
-    "Verify materials needed for the job",
-    "Test existing fixtures before replacement",
-    "Document current condition with photos",
-  ],
-};
-
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = await auth();
   if (denied) return denied;
   const { id } = await params;
 
-  const { description, equipmentType, modelNumber } = await request.json();
+  const job = await dbGetJob(id);
+  if (!job) return Response.json({ error: "Job not found" }, { status: 404 });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    const suggestions = MOCK_SUGGESTIONS[equipmentType] || MOCK_SUGGESTIONS["HVAC"];
-    // Cache in DB
-    const job = await dbGetJob(id);
-    if (job) {
-      await dbUpdateJob(id, { aiSuggestions: suggestions.join("\n") });
-    }
-    return Response.json({ suggestions });
+  await dbUpdateJob(id, { needsAiSuggestions: true });
+
+  return Response.json({
+    ok: true,
+    status: "queued",
+    message: "Research queued. Suggestions will appear at the next scheduled run (8am or 8pm CDT).",
+  });
+}
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await auth();
+  if (denied) return denied;
+  const { id } = await params;
+
+  const job = await dbGetJob(id);
+  if (!job) return Response.json({ error: "Job not found" }, { status: 404 });
+
+  if (job.needsAiSuggestions && !job.aiSuggestions) {
+    return Response.json({ suggestions: null, pending: true });
   }
 
-  try {
-    const prompt = `You are a field service technician assistant for an HVAC and appliance repair company. Based on the following work order, provide brief diagnostic suggestions.
-
-Equipment Type: ${equipmentType || "Unknown"}
-${modelNumber ? `Model: ${modelNumber}` : ""}
-Issue: ${description || "No description provided"}
-
-Provide 3-5 concise bullet points of the most likely causes and things to check first. Keep it practical for a tech in the field. Return ONLY the bullet points, one per line, starting with a dash.`;
-
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 500,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!res.ok) {
-      console.error("AI suggest API error:", await res.text());
-      return Response.json({ suggestions: ["AI service temporarily unavailable. Please try again."] });
+  let suggestions: string[] | string | null = null;
+  if (job.aiSuggestions) {
+    try {
+      suggestions = JSON.parse(job.aiSuggestions);
+    } catch {
+      suggestions = job.aiSuggestions;
     }
-
-    const data = await res.json();
-    const text = data.content?.[0]?.text || "";
-    const suggestions = text.split("\n").filter((l: string) => l.trim()).map((l: string) => l.replace(/^[-•*]\s*/, "").trim());
-
-    // Cache in DB
-    const job = await dbGetJob(id);
-    if (job) {
-      await dbUpdateJob(id, { aiSuggestions: suggestions.join("\n") });
-    }
-
-    return Response.json({ suggestions });
-  } catch (e) {
-    console.error("AI suggest error:", e);
-    return Response.json({ suggestions: ["Failed to generate suggestions. Please try again."] });
   }
+
+  return Response.json({ suggestions, pending: false });
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await auth();
+  if (denied) return denied;
+  const { id } = await params;
+
+  const job = await dbGetJob(id);
+  if (!job) return Response.json({ error: "Job not found" }, { status: 404 });
+
+  await dbUpdateJob(id, { needsAiSuggestions: false });
+
+  return Response.json({ ok: true });
 }

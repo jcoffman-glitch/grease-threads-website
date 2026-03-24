@@ -56,6 +56,7 @@ export interface Job {
   deductibleAmount?: number;
   assignedTo?: string;        // 'joe' | 'anthoney'
   followUpRequired?: boolean;
+  needsAiSuggestions?: boolean;
   // Legacy fields for backward compatibility
   date?: string;
   phone?: string;

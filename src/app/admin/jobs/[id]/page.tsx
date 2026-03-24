@@ -180,27 +180,31 @@ export default function WorkOrderPage() {
     toast.success(toastMessages[newStatus] || `Status: ${newStatus}`);
   }
 
-  async function fetchAiSuggestions() {
+  async function queueAiSuggestions() {
     if (!job) return;
     setAiLoading(true);
     try {
-      const res = await fetch(`/api/admin/jobs/${id}/ai-suggest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: job.problemDescription,
-          equipmentType: job.equipmentType || job.serviceType,
-          modelNumber: job.modelNumber || "",
-        }),
-      });
+      const res = await fetch(`/api/admin/jobs/${id}/ai-suggest`, { method: "POST" });
       const data = await res.json();
-      const suggestions = data.suggestions || [];
-      const suggestionsStr = Array.isArray(suggestions) ? suggestions.join("\n") : suggestions;
-      setJob(prev => prev ? { ...prev, aiSuggestions: suggestionsStr } : prev);
+      if (data.ok) {
+        setJob(prev => prev ? { ...prev, needsAiSuggestions: true } : prev);
+        toast.success("Research queued. Check back at 8am or 8pm for diagnostic suggestions.");
+      }
     } catch {
-      setJob(prev => prev ? { ...prev, aiSuggestions: "Failed to generate suggestions. Try again later." } : prev);
+      toast.error("Failed to queue AI suggestions.");
     } finally {
       setAiLoading(false);
+    }
+  }
+
+  async function cancelAiSuggestions() {
+    if (!job) return;
+    try {
+      await fetch(`/api/admin/jobs/${id}/ai-suggest`, { method: "DELETE" });
+      setJob(prev => prev ? { ...prev, needsAiSuggestions: false } : prev);
+      toast.success("AI research cancelled.");
+    } catch {
+      toast.error("Failed to cancel.");
     }
   }
 
@@ -476,35 +480,46 @@ export default function WorkOrderPage() {
         {aiOpen && (
           <div className="px-4 pb-4 border-t border-gray-100">
             {job.aiSuggestions ? (
-              <div className="bg-gray-50 rounded-lg p-3 mt-3 text-sm text-gray-700">
-                <ul className="list-disc list-inside space-y-1">
-                  {job.aiSuggestions.split("\n").filter(Boolean).map((line, i) => (
-                    <li key={i}>{line.replace(/^[-•*]\s*/, "")}</li>
-                  ))}
-                </ul>
+              <>
+                <div className="bg-gray-50 rounded-lg p-3 mt-3 text-sm text-gray-700">
+                  <ul className="list-disc list-inside space-y-1">
+                    {job.aiSuggestions.split("\n").filter(Boolean).map((line, i) => (
+                      <li key={i}>{line.replace(/^[-•*]\s*/, "")}</li>
+                    ))}
+                  </ul>
+                </div>
+                <button
+                  onClick={queueAiSuggestions}
+                  disabled={aiLoading}
+                  className="w-full mt-2 text-xs text-gray-400 py-1"
+                >
+                  Request New Suggestions
+                </button>
+              </>
+            ) : job.needsAiSuggestions ? (
+              <div className="bg-amber-50 rounded-lg p-4 mt-3 text-center text-sm text-amber-700">
+                <p className="font-medium">⏳ Research queued — suggestions arrive at 8am or 8pm CDT</p>
+                <button
+                  onClick={cancelAiSuggestions}
+                  className="mt-2 text-xs text-gray-400 underline"
+                >
+                  Cancel
+                </button>
               </div>
             ) : aiLoading ? (
               <div className="bg-gray-50 rounded-lg p-4 mt-3 text-center text-sm text-gray-500">
                 <div className="animate-spin inline-block w-5 h-5 border-2 border-amber border-t-transparent rounded-full mb-2" />
-                <p>Generating suggestions...</p>
+                <p>Queuing research...</p>
               </div>
             ) : (job.problemDescription || job.modelNumber) ? (
               <button
-                onClick={fetchAiSuggestions}
+                onClick={queueAiSuggestions}
                 className="w-full mt-3 bg-amber/10 text-amber-700 font-semibold py-3 rounded-lg text-sm active:scale-95 min-h-[44px]"
               >
                 Get AI Suggestions
               </button>
             ) : (
               <p className="text-xs text-gray-400 mt-3">Add a problem description or model number to get AI suggestions.</p>
-            )}
-            {job.aiSuggestions && (
-              <button
-                onClick={fetchAiSuggestions}
-                className="w-full mt-2 text-xs text-gray-400 py-1"
-              >
-                Regenerate
-              </button>
             )}
           </div>
         )}
