@@ -155,7 +155,19 @@ function AdminShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="p-3 border-t border-navy-light">
+        <div className="p-3 border-t border-navy-light space-y-1">
+          <Link
+            href="/admin/help"
+            onClick={() => setSidebarOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              pathname === "/admin/help"
+                ? "bg-amber text-navy font-semibold"
+                : "text-gray-300 hover:bg-navy-light hover:text-white"
+            }`}
+          >
+            <span>❓</span>
+            Help
+          </Link>
           <button
             onClick={() => signOut({ callbackUrl: "/admin/login" })}
             className="w-full px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-navy-light rounded-lg transition-colors text-left"

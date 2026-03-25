@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Job } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 const V3_STATUSES = ["Lead", "Work Order", "En Route", "Working", "Job Done", "Final Invoice", "Payment", "Review"] as const;
 const SERVICE_TYPES = ["HVAC", "Appliance Repair", "Commercial Kitchen", "Handyman", "Other"];
@@ -154,15 +155,22 @@ export default function JobsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-navy">Jobs</h1>
-        <button
-          onClick={() => { setShowNewModal(true); setForm({ ...emptyJob }); setCustomerQuery(""); }}
-          className="px-4 py-2.5 bg-amber text-white rounded-lg font-semibold text-sm active:scale-95 min-h-[44px]"
-        >
-          + New Job
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowNewModal(true); setForm({ ...emptyJob }); setCustomerQuery(""); }}
+            className="px-4 py-2.5 bg-amber text-white rounded-lg font-semibold text-sm active:scale-95 min-h-[44px]"
+          >
+            + New Job
+          </button>
+          <HelpTip text="Tap here to log a new service call. Fill in the customer name, their problem, and set the status to Called." />
+        </div>
       </div>
 
       {/* Status filter pills */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-sm font-semibold text-gray-500">Status</span>
+        <HelpTip text="The status shows where a job is in the workflow: Lead → Work Order → En Route → Working → Job Done → Final Invoice → Payment → Review" />
+      </div>
       <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
         {["All", ...V3_STATUSES, "Warranty"].map((s) => {
           const count = s === "All" ? jobs.length : s === "Warranty" ? jobs.filter((j) => j.warrantyFlag).length : jobs.filter((j) => mapStatus(j.status) === s).length;

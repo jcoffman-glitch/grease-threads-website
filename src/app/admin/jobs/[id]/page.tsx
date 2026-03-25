@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import type { Job, JobItem, Invoice, PriceListItem } from "@/lib/types";
+import { HelpTip } from "@/components/HelpTip";
 
 const V3_STATUSES = ["Lead", "Work Order", "En Route", "Working", "Job Done", "Final Invoice", "Payment", "Review"] as const;
 
@@ -287,6 +288,10 @@ export default function WorkOrderPage() {
 
       {/* 2. Status Pipeline Bar */}
       <div data-testid="status-bar" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-3 overflow-x-auto">
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Status</span>
+          <HelpTip text="Tap a status pill to advance the job. Each step moves the job forward in the workflow." />
+        </div>
         <div className="flex gap-1.5 min-w-max">
           {V3_STATUSES.map((s, i) => {
             const isActive = displayStatus === s;
@@ -401,7 +406,10 @@ export default function WorkOrderPage() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Model Number</label>
+            <div className="flex items-center gap-1 mb-1">
+              <label className="text-xs text-gray-500">Model Number</label>
+              <HelpTip text="Enter the model number from the equipment label. This unlocks the 'Find Manual' button." />
+            </div>
             <div className="flex gap-2">
               <input
                 value={job.modelNumber || ""}
@@ -435,7 +443,10 @@ export default function WorkOrderPage() {
             <p className="text-sm text-gray-700 px-1">{LEAD_SOURCES[job.leadSource || ""] || job.leadSource || "—"}</p>
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Internal Notes</label>
+            <div className="flex items-center gap-1 mb-1">
+              <label className="text-xs text-gray-500">Internal Notes</label>
+              <HelpTip text="Internal notes — the customer never sees these. Good place for diagnostic notes, callback reminders, or what was tried." />
+            </div>
             <textarea
               value={job.notes || ""}
               onChange={e => autoSave({ notes: e.target.value })}
@@ -474,7 +485,10 @@ export default function WorkOrderPage() {
           onClick={() => setAiOpen(!aiOpen)}
           className="w-full px-4 py-3 flex items-center justify-between active:bg-gray-50"
         >
-          <span className="font-bold text-navy text-sm uppercase tracking-wide">AI Suggestions — verify with your own diagnosis</span>
+          <span className="flex items-center gap-2 font-bold text-navy text-sm uppercase tracking-wide">
+            AI Suggestions — verify with your own diagnosis
+            <HelpTip text="These are computer-generated suggestions based on the problem description. Always use your own judgment — these are just starting points." position="bottom" />
+          </span>
           <span className="text-gray-400 text-lg">{aiOpen ? "▲" : "▼"}</span>
         </button>
         {aiOpen && (
@@ -528,7 +542,10 @@ export default function WorkOrderPage() {
       {/* 6. Parts & Labor */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
         <div className="flex justify-between items-center mb-3">
-          <h2 className="font-bold text-navy text-sm uppercase tracking-wide">Parts & Labor</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-bold text-navy text-sm uppercase tracking-wide">Parts & Labor</h2>
+            <HelpTip text="Add each part you use and your labor time here. These feed directly into the invoice total." />
+          </div>
           <button onClick={() => setAddingItem(!addingItem)}
             className="bg-amber text-white text-sm font-semibold px-4 py-2.5 rounded-lg active:scale-95 min-h-[44px]">
             + Add Item
@@ -817,10 +834,13 @@ export default function WorkOrderPage() {
             Call
           </a>
           {showInvoiceBtn && !invoice && (
-            <button onClick={generateInvoice} disabled={generatingInvoice || items.length === 0}
-              className="flex-1 bg-amber text-white font-black py-3 rounded-xl text-sm disabled:opacity-50 active:scale-95 min-h-[44px]">
-              {generatingInvoice ? "Generating..." : "Generate Invoice"}
-            </button>
+            <div className="flex-1 flex items-center gap-1">
+              <button onClick={generateInvoice} disabled={generatingInvoice || items.length === 0}
+                className="flex-1 bg-amber text-white font-black py-3 rounded-xl text-sm disabled:opacity-50 active:scale-95 min-h-[44px]">
+                {generatingInvoice ? "Generating..." : "Generate Invoice"}
+              </button>
+              <HelpTip text="Creates an invoice from the parts and labor you've entered. Review the total before sending." position="top" />
+            </div>
           )}
           {displayStatus === "Review" && (
             <button
