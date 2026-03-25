@@ -583,14 +583,30 @@ export default function WorkOrderPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500">Qty</label>
-                <input type="number" min="0.01" step="0.01" value={newItem.quantity}
-                  onChange={e => setNewItem(n => ({ ...n, quantity: parseFloat(e.target.value) || 1 }))}
+                <input type="text" inputMode="decimal" pattern="[0-9]*\.?[0-9]*" value={newItem.quantity}
+                  onFocus={e => e.target.select()}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNewItem(n => ({ ...n, quantity: val === "" ? "" as unknown as number : parseFloat(val) || 0 }));
+                  }}
+                  onBlur={e => {
+                    const val = parseFloat(e.target.value);
+                    if (!val || val <= 0) setNewItem(n => ({ ...n, quantity: 1 }));
+                  }}
                   className="w-full border rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-gray-500">Unit Price</label>
-                <input type="number" min="0" step="0.01" value={newItem.unitPrice}
-                  onChange={e => setNewItem(n => ({ ...n, unitPrice: parseFloat(e.target.value) || 0 }))}
+                <input type="text" inputMode="decimal" pattern="[0-9]*\.?[0-9]*" value={newItem.unitPrice}
+                  onFocus={e => e.target.select()}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNewItem(n => ({ ...n, unitPrice: val === "" ? "" as unknown as number : parseFloat(val) || 0 }));
+                  }}
+                  onBlur={e => {
+                    const val = parseFloat(e.target.value);
+                    if (isNaN(val)) setNewItem(n => ({ ...n, unitPrice: 0 }));
+                  }}
                   className="w-full border rounded-lg px-3 py-2.5 text-sm" />
               </div>
             </div>
