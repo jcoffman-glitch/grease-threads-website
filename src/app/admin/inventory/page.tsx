@@ -155,6 +155,7 @@ export default function InventoryPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Quantity to Add</label>
               <input type="number" value={receiveQty} onChange={(e) => setReceiveQty(parseInt(e.target.value) || 0)}
+                onFocus={(e) => e.target.select()}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" min={1} />
             </div>
             <div className="flex gap-3 mt-4">
@@ -208,6 +209,7 @@ function Field({ label, type = "text", value, onChange }: { label: string; type?
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => e.target.select()}
         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm" />
     </div>
   );
