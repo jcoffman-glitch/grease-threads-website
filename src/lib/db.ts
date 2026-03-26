@@ -145,6 +145,8 @@ export async function ensureSchema(): Promise<void> {
     "ALTER TABLE jobs ADD COLUMN follow_up_notes TEXT",
     "ALTER TABLE customers ADD COLUMN notes TEXT",
     "ALTER TABLE customers ADD COLUMN preferred_contact TEXT",
+    "ALTER TABLE jobs ADD COLUMN google_calendar_event_id TEXT UNIQUE",
+    "ALTER TABLE jobs ADD COLUMN google_calendar_synced_at TEXT",
   ];
   for (const sql of v2Migrations) {
     try { await client.execute(sql); } catch { /* column already exists */ }
@@ -726,6 +728,26 @@ export async function dbLogNotification(data: Partial<NotificationLog>): Promise
   await client.execute({
     sql: `INSERT INTO notifications_log (id, job_id, recipient, type, event, sent_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     args: [id, data.jobId || null, data.recipient || "joe", data.type || "toast", data.event || "", new Date().toISOString(), data.status || "sent"],
+  });
+}
+
+// ── Calendar Sync Helpers ─────────────────────────────────────────────────
+
+export async function dbGetJobByCalendarEventId(calendarEventId: string): Promise<Job | null> {
+  await ensureSchema();
+  const res = await client.execute({
+    sql: "SELECT * FROM jobs WHERE google_calendar_event_id = ? LIMIT 1",
+    args: [calendarEventId],
+  });
+  if (!res.rows.length) return null;
+  return rowToJob(res.rows[0]);
+}
+
+export async function dbSetJobCalendarEventId(jobId: string, calendarEventId: string): Promise<void> {
+  await ensureSchema();
+  await client.execute({
+    sql: "UPDATE jobs SET google_calendar_event_id = ?, google_calendar_synced_at = ? WHERE id = ?",
+    args: [calendarEventId, new Date().toISOString(), jobId],
   });
 }
 

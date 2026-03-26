@@ -7,6 +7,10 @@
     {
       "path": "/api/admin/subscriptions/cron",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/admin/calendar/cron",
+      "schedule": "0 9 * * *"
     }
   ]
 }
