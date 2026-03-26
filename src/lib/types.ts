@@ -156,6 +156,21 @@ export interface PriceListItem {
   category?: string;
 }
 
+export type SocialPost = {
+  id: string;
+  post_type: string;
+  context_notes?: string;
+  generated_content?: string;
+  scheduled_at?: string;
+  status: string;
+  revision_notes?: string;
+  fb_post_id?: string;
+  fb_post_url?: string;
+  posted_at?: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export interface ServiceLogEntry {
   id: string;
   dateTime: string;

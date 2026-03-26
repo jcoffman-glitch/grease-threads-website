@@ -120,6 +120,20 @@ export async function ensureSchema(): Promise<void> {
       preferred_contact TEXT
     );
     CREATE UNIQUE INDEX IF NOT EXISTS customers_email_unique ON customers(email) WHERE email IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS social_posts (
+      id TEXT PRIMARY KEY,
+      post_type TEXT DEFAULT 'Other',
+      context_notes TEXT,
+      generated_content TEXT,
+      scheduled_at TEXT,
+      status TEXT DEFAULT 'Draft',
+      revision_notes TEXT,
+      fb_post_id TEXT,
+      fb_post_url TEXT,
+      posted_at TEXT,
+      created_at TEXT,
+      updated_at TEXT
+    );
   `);
   // v2 schema migrations — add columns if missing
   const v2Migrations = [
