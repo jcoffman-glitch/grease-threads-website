@@ -22,24 +22,32 @@ test.describe("Public pages", () => {
     await page.goto("/book");
     await page.waitForLoadState("networkidle");
 
+    // Step 1: Verify we're on step 1
+    await expect(page.getByText("What can we help with?")).toBeVisible();
+
     // Step 1: Select a service type
     await page.getByText("HVAC / Heating & Cooling").click();
-    await page.getByRole("button", { name: /next/i }).click();
+    // Click Continue button to advance to step 2
+    await page.getByRole("button", { name: /continue/i }).first().click();
 
     // Step 2: Describe the problem
+    await expect(page.getByText("What's going on?")).toBeVisible();
     await page.getByPlaceholder(/e\.g\.|describe|problem|stopped|AC/i).first().fill(
       "PLAYWRIGHT_TEST: AC not cooling properly"
     );
-    await page.getByText("As soon as possible").click();
-    await page.getByRole("button", { name: /next/i }).click();
+    await page.getByPlaceholder("123 Main St").fill("123 Test St");
+    await page.getByRole("button", { name: /continue/i }).first().click();
 
-    // Step 3: Contact info
-    await page.getByLabel(/first/i).fill("Playwright");
-    await page.getByLabel(/last/i).fill("Test");
-    await page.getByLabel(/phone/i).fill("812-555-0199");
-    await page.getByLabel(/email/i).fill("playwright-test@example.com");
-    await page.getByLabel(/address/i).fill("123 Test St");
-    await page.getByRole("button", { name: /next|review/i }).click();
+    // Step 3: Contact info — wait for the form to appear
+    await expect(page.getByText("How do we reach you?")).toBeVisible();
+    // Fill in contact info using role-based selectors (getByLabel has issues with * span)
+    const inputs = page.locator("input[type='text'], input[type='tel'], input[type='email']");
+    await inputs.nth(0).fill("Playwright"); // First Name
+    await inputs.nth(1).fill("Test"); // Last Name
+    await inputs.nth(2).fill("812-555-0199"); // Phone
+    await inputs.nth(3).fill("playwright-test@example.com"); // Email
+    await page.getByText("As soon as possible").click();
+    await page.getByRole("button", { name: /continue/i }).first().click();
 
     // Step 4: Review & Submit
     await page.getByRole("button", { name: /submit|book/i }).click();
