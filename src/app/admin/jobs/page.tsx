@@ -70,6 +70,7 @@ export default function JobsPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [form, setForm] = useState({ ...emptyJob });
   const [saving, setSaving] = useState(false);
+  const navigateAfterRef = useRef(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; phone: string; email: string; address: string }[]>([]);
   const [customerQuery, setCustomerQuery] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -165,10 +166,16 @@ export default function JobsPage() {
         body: JSON.stringify(form),
       });
       const saved = await res.json();
-      setShowNewModal(false);
-      setForm({ ...emptyJob });
-      setCustomerQuery("");
-      router.push(`/admin/jobs/${saved.id}`);
+      if (navigateAfterRef.current) {
+        router.push(`/admin/jobs/${saved.id}`);
+      } else {
+        setShowNewModal(false);
+        setForm({ ...emptyJob });
+        setCustomerQuery("");
+        // Refresh job list
+        const updated = await fetch("/api/admin/jobs").then((r) => r.json());
+        setJobs(updated);
+      }
     } finally {
       setSaving(false);
     }
@@ -352,13 +359,24 @@ export default function JobsPage() {
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={saving || !form.customerName || !form.customerPhone}
-                className="w-full bg-amber text-white font-bold py-3 rounded-xl text-sm disabled:opacity-50 active:scale-95 min-h-[48px]"
-              >
-                {saving ? "Creating..." : "Create Job"}
-              </button>
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="submit"
+                  disabled={saving || !form.customerName || !form.customerPhone}
+                  onClick={() => { navigateAfterRef.current = false; }}
+                  className="flex-1 border-2 border-amber text-amber font-bold py-3 rounded-xl text-sm disabled:opacity-50 active:scale-95 min-h-[48px] transition-transform"
+                >
+                  {saving && !navigateAfterRef.current ? "Creating..." : "Create Job"}
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !form.customerName || !form.customerPhone}
+                  onClick={() => { navigateAfterRef.current = true; }}
+                  className="flex-1 bg-amber text-white font-bold py-3 rounded-xl text-sm disabled:opacity-50 active:scale-95 min-h-[48px] transition-transform"
+                >
+                  {saving && navigateAfterRef.current ? "Opening..." : "Create & Open →"}
+                </button>
+              </div>
             </form>
           </div>
         </div>

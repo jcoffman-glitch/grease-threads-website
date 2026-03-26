@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import type { Job, Invoice } from "@/lib/types";
 
 function NewJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: (j: Job) => void }) {
+  const router = useRouter();
   const [form, setForm] = useState({
     customerName: "", customerPhone: "", customerEmail: "",
     serviceType: "HVAC", problemDescription: "", address: "",
@@ -13,6 +15,7 @@ function NewJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: (j: J
   });
   const [saving, setSaving] = useState(false);
   const [listening, setListening] = useState(false);
+  const navigateAfterRef = useRef(false);
 
   const hasSpeech = typeof window !== "undefined" &&
     (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -42,14 +45,22 @@ function NewJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: (j: J
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const res = await fetch("/api/admin/jobs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const saved = await res.json();
-    onSaved(saved);
-    onClose();
+    try {
+      const res = await fetch("/api/admin/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const saved = await res.json();
+      if (navigateAfterRef.current) {
+        router.push(`/admin/jobs/${saved.id}`);
+      } else {
+        onSaved(saved);
+        onClose();
+      }
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -91,10 +102,24 @@ function NewJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: (j: J
               onChange={e => setForm(f => ({ ...f, problemDescription: e.target.value }))}
               rows={3} className="w-full border rounded-lg px-3 py-3 text-base resize-none" />
           </div>
-          <button type="submit" disabled={saving}
-            className="w-full bg-amber text-white font-bold py-3 rounded-xl text-base disabled:opacity-50">
-            {saving ? "Saving..." : "Create Job"}
-          </button>
+          <div className="flex gap-3 pt-1">
+            <button
+              type="submit"
+              disabled={saving}
+              onClick={() => { navigateAfterRef.current = false; }}
+              className="flex-1 border-2 border-amber text-amber font-bold py-3 rounded-xl text-sm disabled:opacity-50 active:scale-95 transition-transform"
+            >
+              {saving && !navigateAfterRef.current ? "Saving..." : "Create Job"}
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              onClick={() => { navigateAfterRef.current = true; }}
+              className="flex-1 bg-amber text-white font-bold py-3 rounded-xl text-sm disabled:opacity-50 active:scale-95 transition-transform"
+            >
+              {saving && navigateAfterRef.current ? "Opening..." : "Create & Open →"}
+            </button>
+          </div>
         </form>
       </div>
     </div>
