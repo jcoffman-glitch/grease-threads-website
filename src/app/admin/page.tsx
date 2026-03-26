@@ -157,7 +157,7 @@ function TechDashboard({ jobs }: { jobs: Job[] }) {
         <div className="space-y-3">
           {todaysJobs.map(job => (
             <Link key={job.id} href={`/admin/jobs/${job.id}`}
-              className="block bg-white rounded-xl shadow-sm border border-gray-100 p-5 active:scale-[0.98] transition-transform">
+              className="block bg-white rounded-xl shadow-sm border border-gray-100 p-5 active:scale-[0.98] hover:bg-gray-50 transition-all">
               <div className="flex items-start justify-between mb-3">
                 <p className="font-black text-navy text-xl leading-tight">{job.customerName}</p>
                 <StatusBadge status={job.status} />
@@ -261,7 +261,7 @@ function AdminDashboardView({ jobs, invoices, showNewJob, setShowNewJob }: {
           <div className="divide-y divide-gray-50">
             {todaySchedule.map(job => (
               <Link key={job.id} href={`/admin/jobs/${job.id}`}
-                className="flex items-center gap-3 px-5 py-4 active:bg-gray-50">
+                className="flex items-center gap-3 px-5 py-4 min-h-[56px] active:bg-gray-50 hover:bg-gray-50 transition-colors">
                 <span className="text-sm font-bold text-navy whitespace-nowrap">
                   {new Date(job.scheduledAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
