@@ -74,6 +74,7 @@ export default function JobsPage() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const [listening, setListening] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -128,6 +129,31 @@ export default function JobsPage() {
       return mapStatus(j.status) === filter;
     })
     .sort((a, b) => new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime());
+
+  const hasSpeech = typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  function startVoice() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript;
+      setForm(f => ({
+        ...f,
+        problemDescription: f.problemDescription
+          ? f.problemDescription + " " + transcript
+          : transcript,
+      }));
+    };
+    recognition.start();
+  }
 
   async function createJob(e: React.FormEvent) {
     e.preventDefault();
@@ -290,39 +316,6 @@ export default function JobsPage() {
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Email</label>
-                <input
-                  type="email"
-                  value={form.customerEmail}
-                  onChange={(e) => setForm({ ...form, customerEmail: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2.5 text-sm"
-                  placeholder="Email (optional)"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Service Type</label>
-                <select
-                  value={form.serviceType}
-                  onChange={(e) => setForm({ ...form, serviceType: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2.5 text-sm"
-                >
-                  {SERVICE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Problem Description</label>
-                <textarea
-                  value={form.problemDescription}
-                  onChange={(e) => setForm({ ...form, problemDescription: e.target.value })}
-                  rows={3}
-                  className="w-full border rounded-lg px-3 py-2.5 text-sm resize-none"
-                  placeholder="Describe the issue..."
-                />
-              </div>
-
-              <div>
                 <label className="text-xs text-gray-500 block mb-1">Address</label>
                 <input
                   value={form.address}
@@ -333,24 +326,30 @@ export default function JobsPage() {
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Scheduled Date/Time</label>
-                <input
-                  type="datetime-local"
-                  value={form.scheduledAt}
-                  onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2.5 text-sm"
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-gray-500">Problem Description</label>
+                  {hasSpeech && (
+                    <button
+                      type="button"
+                      onClick={startVoice}
+                      disabled={listening}
+                      className={`text-sm px-2 py-1 rounded-lg font-medium transition-colors ${
+                        listening
+                          ? "bg-red-100 text-red-600 animate-pulse"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {listening ? "🔴 Listening..." : "🎤 Voice"}
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  value={form.problemDescription}
+                  onChange={(e) => setForm({ ...form, problemDescription: e.target.value })}
+                  rows={3}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm resize-none"
+                  placeholder="Describe the issue... or tap 🎤"
                 />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Lead Source</label>
-                <select
-                  value={form.leadSource}
-                  onChange={(e) => setForm({ ...form, leadSource: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2.5 text-sm"
-                >
-                  {LEAD_SOURCES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-                </select>
               </div>
 
               <button

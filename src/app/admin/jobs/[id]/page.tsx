@@ -475,6 +475,18 @@ export default function WorkOrderPage() {
                 className="w-5 h-5 accent-amber" />
               <span className="text-sm text-gray-700">Follow-up Required</span>
             </label>
+            {job.followUpRequired && (
+              <div className="mt-2">
+                <label className="text-xs text-gray-500 block mb-1">Follow-up Notes</label>
+                <textarea
+                  value={job.followUpNotes || ""}
+                  onChange={e => autoSave({ followUpNotes: e.target.value })}
+                  rows={3}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm resize-none"
+                  placeholder="What needs follow-up? Call back date, parts needed, etc."
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import type { Job, Invoice, InventoryItem } from "@/lib/types";
+import type { Job, Invoice } from "@/lib/types";
 
 function NewJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: (j: Job) => void }) {
   const [form, setForm] = useState({
@@ -12,6 +12,32 @@ function NewJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: (j: J
     scheduledAt: "", status: "New", notes: "",
   });
   const [saving, setSaving] = useState(false);
+  const [listening, setListening] = useState(false);
+
+  const hasSpeech = typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  function startVoice() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript;
+      setForm(f => ({
+        ...f,
+        problemDescription: f.problemDescription
+          ? f.problemDescription + " " + transcript
+          : transcript,
+      }));
+    };
+    recognition.start();
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -40,25 +66,31 @@ function NewJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: (j: J
           <input required placeholder="Phone" value={form.customerPhone}
             onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))}
             className="w-full border rounded-lg px-3 py-3 text-base" />
-          <input placeholder="Email" value={form.customerEmail}
-            onChange={e => setForm(f => ({ ...f, customerEmail: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-3 text-base" />
           <input placeholder="Address" value={form.address}
             onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
             className="w-full border rounded-lg px-3 py-3 text-base" />
-          <select value={form.serviceType}
-            onChange={e => setForm(f => ({ ...f, serviceType: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-3 text-base">
-            {["HVAC", "Appliance Repair", "Commercial Kitchen", "Handyman", "Other"].map(s => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-          <textarea required placeholder="Problem Description" value={form.problemDescription}
-            onChange={e => setForm(f => ({ ...f, problemDescription: e.target.value }))}
-            rows={3} className="w-full border rounded-lg px-3 py-3 text-base" />
-          <input type="datetime-local" placeholder="Scheduled" value={form.scheduledAt}
-            onChange={e => setForm(f => ({ ...f, scheduledAt: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-3 text-base" />
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-gray-500">Problem Description *</label>
+              {hasSpeech && (
+                <button
+                  type="button"
+                  onClick={startVoice}
+                  disabled={listening}
+                  className={`text-sm px-2 py-1 rounded-lg font-medium transition-colors ${
+                    listening
+                      ? "bg-red-100 text-red-600 animate-pulse"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {listening ? "🔴 Listening..." : "🎤 Voice"}
+                </button>
+              )}
+            </div>
+            <textarea required placeholder="Describe the issue... or tap 🎤" value={form.problemDescription}
+              onChange={e => setForm(f => ({ ...f, problemDescription: e.target.value }))}
+              rows={3} className="w-full border rounded-lg px-3 py-3 text-base resize-none" />
+          </div>
           <button type="submit" disabled={saving}
             className="w-full bg-amber text-white font-bold py-3 rounded-xl text-base disabled:opacity-50">
             {saving ? "Saving..." : "Create Job"}
@@ -215,7 +247,52 @@ function AdminDashboardView({ jobs, invoices, showNewJob, setShowNewJob }: {
         />
       )}
 
-      <h1 className="text-2xl font-black text-navy mb-4">Command Center</h1>
+      <h1 className="text-2xl font-black text-navy mb-1">Today&apos;s Jobs</h1>
+      <p className="text-sm text-gray-400 mb-4">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
+
+      {/* Today's Schedule — HERO */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-4">
+        {todaySchedule.length === 0 ? (
+          <div className="px-5 py-8 text-gray-400 text-sm text-center">
+            <div className="text-4xl mb-2">📋</div>
+            <p>Nothing scheduled today.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {todaySchedule.map(job => (
+              <Link key={job.id} href={`/admin/jobs/${job.id}`}
+                className="flex items-center gap-3 px-5 py-4 active:bg-gray-50">
+                <span className="text-sm font-bold text-navy whitespace-nowrap">
+                  {new Date(job.scheduledAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-navy truncate">{job.customerName}</p>
+                  <p className="text-xs text-gray-400 truncate">{job.address || "No address"} · {job.serviceType}</p>
+                </div>
+                <StatusBadge status={job.status} />
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="space-y-3 mb-4">
+        <button onClick={() => setShowNewJob(true)}
+          className="w-full bg-amber text-white font-bold py-4 rounded-xl text-lg active:scale-95 transition-transform shadow-md">
+          + New Job
+        </button>
+        <div className="grid grid-cols-2 gap-3">
+          <Link href="/admin/jobs"
+            className="bg-navy text-white font-semibold py-4 rounded-xl text-center active:scale-95 transition-transform">
+            All Jobs
+          </Link>
+          <Link href="/admin/invoices"
+            className="bg-navy text-white font-semibold py-4 rounded-xl text-center active:scale-95 transition-transform">
+            Invoices
+          </Link>
+        </div>
+      </div>
 
       {/* Action Queue — 3 cards */}
       <div className="grid grid-cols-3 gap-3 mb-4">
@@ -237,74 +314,35 @@ function AdminDashboardView({ jobs, invoices, showNewJob, setShowNewJob }: {
         </Link>
       </div>
 
-      {/* Today's Schedule */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-4">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="font-bold text-navy text-lg">Today&apos;s Schedule</h2>
-        </div>
-        {todaySchedule.length === 0 ? (
-          <div className="px-5 py-6 text-gray-400 text-sm text-center">Nothing scheduled today.</div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {todaySchedule.map(job => (
-              <Link key={job.id} href={`/admin/jobs/${job.id}`}
-                className="flex items-center gap-3 px-5 py-4 active:bg-gray-50">
-                <span className="text-sm font-bold text-navy whitespace-nowrap">
-                  {new Date(job.scheduledAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-navy truncate">{job.customerName}</p>
-                  <p className="text-xs text-gray-400 truncate">{job.address || "No address"} · {job.serviceType}</p>
-                </div>
-                <StatusBadge status={job.status} />
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Business Pulse */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-4 p-5">
-        <h2 className="font-bold text-navy text-lg mb-3">Business Pulse</h2>
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-2xl font-black text-navy">{jobsThisWeek.length}</p>
-            <p className="text-xs text-gray-500">Jobs This Week</p>
-          </div>
-          <div>
-            <p className="text-2xl font-black text-green-600">${revenueThisMonth.toFixed(0)}</p>
-            <p className="text-xs text-gray-500">Revenue This Mo.</p>
-          </div>
-          <div>
-            <p className="text-2xl font-black text-yellow-600">{pendingReviews.length}</p>
-            <p className="text-xs text-gray-500">Reviews Pending</p>
-          </div>
-        </div>
-      </div>
-
       {/* Suggested Next Action */}
       <div className="bg-amber/10 rounded-xl p-4 mb-4 border border-amber/30">
         <p className="text-sm font-bold text-navy mb-1">Suggested Next Action</p>
         <p className="text-sm text-amber-800">{suggestedAction}</p>
       </div>
 
-      {/* Quick Actions */}
-      <div className="space-y-3">
-        <button onClick={() => setShowNewJob(true)}
-          className="w-full bg-amber text-white font-bold py-4 rounded-xl text-lg active:scale-95 transition-transform shadow-md">
-          + New Job
-        </button>
-        <div className="grid grid-cols-2 gap-3">
-          <Link href="/admin/jobs"
-            className="bg-navy text-white font-semibold py-4 rounded-xl text-center active:scale-95 transition-transform">
-            All Jobs
-          </Link>
-          <Link href="/admin/invoices"
-            className="bg-navy text-white font-semibold py-4 rounded-xl text-center active:scale-95 transition-transform">
-            Invoices
-          </Link>
+      {/* Business Pulse — collapsed at bottom */}
+      <details className="bg-white rounded-xl shadow-sm border border-gray-100 mb-4">
+        <summary className="px-5 py-4 font-bold text-navy text-sm cursor-pointer select-none list-none flex items-center justify-between">
+          <span>Business Pulse</span>
+          <span className="text-gray-400 text-xs">▼</span>
+        </summary>
+        <div className="px-5 pb-5 border-t border-gray-100">
+          <div className="grid grid-cols-3 gap-4 text-center pt-4">
+            <div>
+              <p className="text-2xl font-black text-navy">{jobsThisWeek.length}</p>
+              <p className="text-xs text-gray-500">Jobs This Week</p>
+            </div>
+            <div>
+              <p className="text-2xl font-black text-green-600">${revenueThisMonth.toFixed(0)}</p>
+              <p className="text-xs text-gray-500">Revenue This Mo.</p>
+            </div>
+            <div>
+              <p className="text-2xl font-black text-yellow-600">{pendingReviews.length}</p>
+              <p className="text-xs text-gray-500">Reviews Pending</p>
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
     </div>
   );
 }
