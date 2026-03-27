@@ -212,6 +212,8 @@ function rowToJob(r: any): Job {
     followUpRequired: !!r.follow_up_required,
     followUpNotes: r.follow_up_notes || undefined,
     needsAiSuggestions: Boolean(r.needs_ai_suggestions),
+    googleCalendarEventId: r.google_calendar_event_id || undefined,
+    googleCalendarSyncedAt: r.google_calendar_synced_at || undefined,
   };
 }
 
@@ -772,4 +774,41 @@ export async function dbGetJob(id: string): Promise<Job | null> {
   const res = await client.execute({ sql: "SELECT * FROM jobs WHERE id = ?", args: [id] });
   if (!res.rows.length) return null;
   return rowToJob(res.rows[0]);
+}
+
+/**
+ * Find potential duplicate jobs for deduplication.
+ * Checks for jobs with the same scheduled time within a ±30-minute window
+ * and the same customer name (case-insensitive, partial match).
+ * Returns null if no duplicate is found.
+ */
+export async function dbFindPotentialDuplicate(
+  customerName: string,
+  scheduledAt: string
+): Promise<Job | null> {
+  await ensureSchema();
+  const dt = new Date(scheduledAt);
+  const windowMs = 30 * 60 * 1000; // ±30 minutes
+  const lower = new Date(dt.getTime() - windowMs).toISOString();
+  const upper = new Date(dt.getTime() + windowMs).toISOString();
+
+  // Match on scheduled time window; customer name check happens in JS
+  const res = await client.execute({
+    sql: `SELECT * FROM jobs WHERE scheduled_at >= ? AND scheduled_at <= ? LIMIT 20`,
+    args: [lower, upper],
+  });
+
+  if (!res.rows.length) return null;
+
+  // Normalize name for comparison
+  const normName = customerName.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  for (const row of res.rows) {
+    const existingName = ((row.customer_name as string) || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (existingName && normName && (existingName.includes(normName) || normName.includes(existingName))) {
+      return rowToJob(row);
+    }
+  }
+
+  return null;
 }

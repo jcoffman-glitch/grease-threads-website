@@ -1,13 +1,16 @@
 /**
  * Google Calendar sync service for Grease & Threads.
- * Fetches events from the GnT Google Calendar and auto-creates jobs
- * in Turso for Google Appointment bookings not already in the system.
  *
- * One-way sync: Calendar → Command Center
+ * Two-way sync:
+ * - Web App → Google Calendar: createOrUpdateCalendarEvent() pushes a job to GCal
+ * - Google Calendar → Command Center: syncCalendarEvents() polls and creates jobs
+ *
+ * Safety: deleting a GCal event NEVER deletes a work order. One-way delete safety only.
  */
 
 import { google } from "googleapis";
-import { dbCreateJob, dbGetJobByCalendarEventId, dbSetJobCalendarEventId } from "./db";
+import type { Job } from "./types";
+import { dbCreateJob, dbGetJobByCalendarEventId, dbSetJobCalendarEventId, dbFindPotentialDuplicate } from "./db";
 
 // ── Type for parsed event description ────────────────────────────────────────
 
@@ -258,6 +261,23 @@ export async function syncCalendarEvents(
         ? new Date(rawDateTime).toISOString()
         : undefined;
 
+      // Secondary dedup: check for existing job with same time + customer name
+      // This catches cases where a job was manually created for the same appointment
+      if (scheduledAt && customerName !== "Unknown Customer") {
+        const potentialDup = await dbFindPotentialDuplicate(customerName, scheduledAt);
+        if (potentialDup) {
+          console.warn(
+            `[Calendar Sync] DEDUP FLAG: Event ${event.id} may be a duplicate of job ${potentialDup.jobNumber} ` +
+            `(customer: "${customerName}", time: ${scheduledAt}). ` +
+            `Linking event ID to existing job and skipping creation.`
+          );
+          // Link the calendar event ID to the existing job so we don't flag it again
+          await dbSetJobCalendarEventId(potentialDup.id, event.id);
+          result.skipped++;
+          continue;
+        }
+      }
+
       // Create the job
       const job = await dbCreateJob({
         customerName,
@@ -288,4 +308,124 @@ export async function syncCalendarEvents(
   }
 
   return result;
+}
+
+// ── Web App → Google Calendar (push direction) ────────────────────────────────
+
+/**
+ * Build a Google Calendar event body from a Job.
+ * Title: "[GnT] Customer Name — Service Type"
+ * Description: problem, phone, address
+ */
+function buildCalendarEventBody(job: Job): {
+  summary: string;
+  description: string;
+  start: { dateTime: string; timeZone: string } | { date: string };
+  end: { dateTime: string; timeZone: string } | { date: string };
+} {
+  const summary = `[GnT] ${job.customerName} — ${job.serviceType || "Service Call"}`;
+
+  const descriptionParts: string[] = [];
+  if (job.problemDescription) descriptionParts.push(`Problem: ${job.problemDescription}`);
+  if (job.customerPhone) descriptionParts.push(`Phone: ${job.customerPhone}`);
+  if (job.customerEmail) descriptionParts.push(`Email: ${job.customerEmail}`);
+  if (job.address) descriptionParts.push(`Address: ${job.address}`);
+  if (job.notes) descriptionParts.push(`Notes: ${job.notes}`);
+  if (job.jobNumber) descriptionParts.push(`Job #: ${job.jobNumber}`);
+  descriptionParts.push(`\nManage: https://website-mauve-one-60.vercel.app/admin`);
+
+  const description = descriptionParts.join("\n");
+
+  // Build event time
+  const TZ = "America/Chicago";
+  if (job.scheduledAt) {
+    const startDt = new Date(job.scheduledAt);
+    const endDt = new Date(startDt.getTime() + 2 * 60 * 60 * 1000); // +2h default
+    return {
+      summary,
+      description,
+      start: { dateTime: startDt.toISOString(), timeZone: TZ },
+      end: { dateTime: endDt.toISOString(), timeZone: TZ },
+    };
+  }
+
+  // No scheduled time — all-day event on creation date
+  const today = new Date().toISOString().split("T")[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+  return {
+    summary,
+    description,
+    start: { date: today },
+    end: { date: tomorrow },
+  };
+}
+
+/**
+ * Create or update a Google Calendar event for a job.
+ * - If job already has a google_calendar_event_id → update the existing event.
+ * - Otherwise → create a new event and store the event ID.
+ *
+ * Returns the Google Calendar event ID.
+ */
+export async function createOrUpdateCalendarEvent(
+  job: Job & { googleCalendarEventId?: string }
+): Promise<string | null> {
+  // Skip if no scheduled time and status doesn't warrant a calendar entry
+  // We still create unscheduled jobs as all-day events so Joe sees them
+  const auth = getGoogleAuth();
+  const calendar = google.calendar({ version: "v3", auth });
+  const calendarId = process.env.GOOGLE_CALENDAR_ID || "primary";
+
+  const body = buildCalendarEventBody(job);
+
+  try {
+    if (job.googleCalendarEventId) {
+      // Update existing event
+      await calendar.events.update({
+        calendarId,
+        eventId: job.googleCalendarEventId,
+        requestBody: body,
+      });
+      console.log(`[Calendar Push] Updated event ${job.googleCalendarEventId} for job ${job.jobNumber}`);
+      return job.googleCalendarEventId;
+    } else {
+      // Create new event
+      const res = await calendar.events.insert({
+        calendarId,
+        requestBody: body,
+      });
+      const eventId = res.data.id;
+      if (!eventId) throw new Error("Google Calendar returned no event ID");
+      console.log(`[Calendar Push] Created event ${eventId} for job ${job.jobNumber}`);
+      return eventId;
+    }
+  } catch (err) {
+    console.error(`[Calendar Push] Failed for job ${job.jobNumber}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Delete a Google Calendar event by ID.
+ * NOTE: This does NOT delete the work order — one-way delete safety.
+ * Only call this if you explicitly want to remove the calendar event
+ * (e.g., job was cancelled). The work order is preserved regardless.
+ */
+export async function deleteCalendarEvent(eventId: string): Promise<void> {
+  const auth = getGoogleAuth();
+  const calendar = google.calendar({ version: "v3", auth });
+  const calendarId = process.env.GOOGLE_CALENDAR_ID || "primary";
+
+  try {
+    await calendar.events.delete({ calendarId, eventId });
+    console.log(`[Calendar Push] Deleted event ${eventId}`);
+  } catch (err) {
+    // 410 Gone = already deleted, that's fine
+    const status = (err as { code?: number })?.code;
+    if (status === 410) {
+      console.log(`[Calendar Push] Event ${eventId} already gone (410)`);
+      return;
+    }
+    throw err;
+  }
 }

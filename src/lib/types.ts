@@ -58,6 +58,9 @@ export interface Job {
   followUpRequired?: boolean;
   followUpNotes?: string;
   needsAiSuggestions?: boolean;
+  // Google Calendar sync
+  googleCalendarEventId?: string;
+  googleCalendarSyncedAt?: string;
   // Legacy fields for backward compatibility
   date?: string;
   phone?: string;

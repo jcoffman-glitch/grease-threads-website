@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { dbGetJobs, dbCreateJob, dbUpdateJob, dbDeleteJob } from "@/lib/db";
+import { dbGetJobs, dbCreateJob, dbUpdateJob, dbDeleteJob, dbSetJobCalendarEventId } from "@/lib/db";
+import { createOrUpdateCalendarEvent } from "@/lib/calendar";
 import type { Job } from "@/lib/types";
 
 async function auth() {
@@ -47,6 +48,26 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * Push job to Google Calendar if it has a scheduled time.
+ * Fires & forgets — calendar failure never blocks job creation/update.
+ * Skipped in test mode (TEST_AUTH_BYPASS) to avoid polluting production calendar.
+ */
+async function syncJobToCalendar(job: Job): Promise<void> {
+  // Skip in test/CI environments
+  if (process.env.TEST_AUTH_BYPASS === "true") return;
+
+  try {
+    const eventId = await createOrUpdateCalendarEvent(job);
+    if (eventId && !job.googleCalendarEventId) {
+      await dbSetJobCalendarEventId(job.id, eventId);
+    }
+  } catch (err) {
+    // Log but don't fail the request
+    console.error(`[Calendar Push] Non-fatal: failed to sync job ${job.jobNumber} to calendar:`, err);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const denied = await auth();
@@ -55,6 +76,10 @@ export async function POST(request: Request) {
     const job = await dbCreateJob(body);
     if (job.status === "Lead") {
       await notifyNewLead(job);
+    }
+    // Push to Google Calendar (non-blocking on failure)
+    if (job.scheduledAt || job.status === "Scheduled") {
+      syncJobToCalendar(job).catch(() => {});
     }
     return Response.json(job);
   } catch (e) {
@@ -69,6 +94,10 @@ export async function PUT(request: Request) {
   const body = await request.json();
   const job = await dbUpdateJob(body.id, body);
   if (!job) return Response.json({ error: "Not found" }, { status: 404 });
+  // Push schedule update to Google Calendar (non-blocking on failure)
+  if (job.scheduledAt || job.status === "Scheduled") {
+    syncJobToCalendar(job).catch(() => {});
+  }
   return Response.json(job);
 }
 
@@ -78,6 +107,10 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const job = await dbUpdateJob(body.id, body);
   if (!job) return Response.json({ error: "Not found" }, { status: 404 });
+  // Push schedule update to Google Calendar (non-blocking on failure)
+  if (job.scheduledAt || job.status === "Scheduled") {
+    syncJobToCalendar(job).catch(() => {});
+  }
   return Response.json(job);
 }
 
