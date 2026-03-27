@@ -6,6 +6,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import type { Job, JobItem, Invoice, PriceListItem } from "@/lib/types";
 import { HelpTip } from "@/components/HelpTip";
+import { SendInvoiceDialog } from "@/components/SendInvoiceDialog";
 
 const V3_STATUSES = ["Lead", "Work Order", "En Route", "Working", "Job Done", "Final Invoice", "Payment", "Review"] as const;
 
@@ -67,6 +68,7 @@ export default function WorkOrderPage() {
   const [addingItem, setAddingItem] = useState(false);
   const [newItem, setNewItem] = useState({ description: "", quantity: 1, unitPrice: 0, itemType: "Labor" });
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [sendInvoiceOpen, setSendInvoiceOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [warrantyOpen, setWarrantyOpen] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
@@ -232,6 +234,14 @@ export default function WorkOrderPage() {
     setItems(prev => prev.filter(i => i.id !== itemId));
   }
 
+  function handleInvoiceSent(type: "invoice" | "receipt", sentAt: string) {
+    if (type === "invoice") {
+      setJob(prev => prev ? { ...prev, invoiceSentAt: sentAt } : prev);
+    } else {
+      setJob(prev => prev ? { ...prev, receiptSentAt: sentAt } : prev);
+    }
+  }
+
   async function generateInvoice() {
     setGeneratingInvoice(true);
     const res = await fetch(`/api/admin/invoices/${id}/generate`, {
@@ -258,7 +268,7 @@ export default function WorkOrderPage() {
   const subtotal = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
   const taxAmount = includeTax ? subtotal * (taxRate / 100) : 0;
   const grandTotal = subtotal + taxAmount;
-  const showInvoiceBtn = displayStatus === "Job Done";
+  const showInvoiceBtn = ["Job Done", "Final Invoice", "Payment"].includes(displayStatus);
   const showPaymentReview = displayStatus === "Payment";
   const reviewMessage = `Hi ${job.customerName}! Thanks for calling Grease & Threads. If you have a moment, a Google review really helps: ${GOOGLE_REVIEW_URL} — Thanks! -Joe`;
 

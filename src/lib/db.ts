@@ -161,6 +161,8 @@ export async function ensureSchema(): Promise<void> {
     "ALTER TABLE customers ADD COLUMN preferred_contact TEXT",
     "ALTER TABLE jobs ADD COLUMN google_calendar_event_id TEXT UNIQUE",
     "ALTER TABLE jobs ADD COLUMN google_calendar_synced_at TEXT",
+    "ALTER TABLE jobs ADD COLUMN invoice_sent_at INTEGER",
+    "ALTER TABLE jobs ADD COLUMN invoice_sent_to TEXT",
   ];
   for (const sql of v2Migrations) {
     try { await client.execute(sql); } catch { /* column already exists */ }
@@ -214,6 +216,8 @@ function rowToJob(r: any): Job {
     needsAiSuggestions: Boolean(r.needs_ai_suggestions),
     googleCalendarEventId: r.google_calendar_event_id || undefined,
     googleCalendarSyncedAt: r.google_calendar_synced_at || undefined,
+    invoiceSentAt: r.invoice_sent_at ? new Date(Number(r.invoice_sent_at)).toISOString() : undefined,
+    invoiceSentTo: r.invoice_sent_to || undefined,
   };
 }
 
@@ -757,6 +761,15 @@ export async function dbGetJobByCalendarEventId(calendarEventId: string): Promis
   });
   if (!res.rows.length) return null;
   return rowToJob(res.rows[0]);
+}
+
+export async function dbMarkInvoiceSent(jobId: string, email: string): Promise<void> {
+  await ensureSchema();
+  const now = Date.now();
+  await client.execute({
+    sql: "UPDATE jobs SET invoice_sent_at = ?, invoice_sent_to = ? WHERE id = ?",
+    args: [now, email, jobId],
+  });
 }
 
 export async function dbSetJobCalendarEventId(jobId: string, calendarEventId: string): Promise<void> {
