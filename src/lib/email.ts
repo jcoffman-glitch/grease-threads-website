@@ -1,5 +1,2 @@
-import { Resend } from 'resend';
-
-export const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null;
+// email.ts — no longer used; Resend replaced by gog gmail
+export {};

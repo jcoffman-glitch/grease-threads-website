@@ -2,6 +2,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { dbUpdateJob, dbLogNotification, dbGetJob } from "@/lib/db";
 import type { JobStatus } from "@/lib/types";
+import { spawnSync } from "child_process";
+
+const GOG_BIN = "/home/coffman34/.npm-global/bin/gog";
+const GOG_ACCOUNT = "jcoffman@greasethreads.com";
 
 async function auth() {
   const session = await getServerSession(authOptions);
@@ -10,14 +14,7 @@ async function auth() {
 }
 
 async function sendCustomerEmail(jobId: string, event: string, customerEmail: string, customerName: string) {
-  // Only send if RESEND_API_KEY is set
-  if (!process.env.RESEND_API_KEY) {
-    console.warn(`[Notifications] Skipping customer email (RESEND_API_KEY not set): ${event} for ${customerName}`);
-    return;
-  }
   try {
-    const { Resend } = await import("resend");
-    const resend = new Resend(process.env.RESEND_API_KEY);
     const subjects: Record<string, string> = {
       "en_route": "Your technician is on the way!",
       "on_scene": "Your technician has arrived",
@@ -25,13 +22,25 @@ async function sendCustomerEmail(jobId: string, event: string, customerEmail: st
       "invoice_sent": "Your invoice from Grease & Threads",
       "receipt": "Payment receipt from Grease & Threads",
     };
-    await resend.emails.send({
-      from: "Grease & Threads <notifications@greasethreads.com>",
-      to: customerEmail,
-      subject: subjects[event] || `Update on your service - ${event}`,
-      text: `Hi ${customerName},\n\nThis is an update from Grease & Threads regarding your service.\n\nStatus: ${event}\n\nThank you for choosing Grease & Threads!\n\n- The GnT Team`,
-    });
-    await dbLogNotification({ jobId, recipient: "customer", type: "email", event, status: "sent" });
+    const subject = subjects[event] || `Update on your service - ${event}`;
+    const body = `<p>Hi ${customerName},</p><p>This is an update from Grease &amp; Threads regarding your service.</p><p><strong>Status:</strong> ${event}</p><p>Thank you for choosing Grease &amp; Threads!<br>— The GnT Team</p>`;
+
+    const result = spawnSync(
+      GOG_BIN,
+      ["-a", GOG_ACCOUNT, "gmail", "send", "--to", customerEmail, "--subject", subject, "--body", body, "--html"],
+      {
+        encoding: "utf8",
+        env: { ...process.env, GOG_KEYRING_PASSWORD: "" },
+        maxBuffer: 1024 * 1024,
+      }
+    );
+
+    if (result.status !== 0) {
+      console.error(`[Notifications] gog email failed for ${event}:`, result.stderr);
+      await dbLogNotification({ jobId, recipient: "customer", type: "email", event, status: "failed" });
+    } else {
+      await dbLogNotification({ jobId, recipient: "customer", type: "email", event, status: "sent" });
+    }
   } catch (e) {
     console.error(`[Notifications] Email failed for ${event}:`, e);
     await dbLogNotification({ jobId, recipient: "customer", type: "email", event, status: "failed" });

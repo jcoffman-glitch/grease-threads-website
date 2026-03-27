@@ -1,8 +1,26 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { dbGetJobs, dbGetInvoices } from "@/lib/db";
-import { resend } from "@/lib/email";
 import { confirmationEmail, invoiceEmail, followupEmail } from "@/lib/email-templates";
+import { spawnSync } from "child_process";
+
+const GOG_BIN = "/home/coffman34/.npm-global/bin/gog";
+const GOG_ACCOUNT = "jcoffman@greasethreads.com";
+
+function sendViaGog(to: string, subject: string, htmlBody: string): { ok: boolean; reason?: string } {
+  const result = spawnSync(
+    GOG_BIN,
+    ["-a", GOG_ACCOUNT, "gmail", "send", "--to", to, "--subject", subject, "--body", htmlBody, "--html"],
+    {
+      encoding: "utf8",
+      env: { ...process.env, GOG_KEYRING_PASSWORD: "" },
+      maxBuffer: 10 * 1024 * 1024,
+    }
+  );
+  if (result.error) return { ok: false, reason: result.error.message };
+  if (result.status !== 0) return { ok: false, reason: result.stderr?.trim() || "gog exited non-zero" };
+  return { ok: true };
+}
 
 export async function POST(
   request: Request,
@@ -10,10 +28,6 @@ export async function POST(
 ) {
   const session = await getServerSession(authOptions);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
-
-  if (!resend) {
-    return Response.json({ success: false, reason: "Email not configured" });
-  }
 
   const { id } = await params;
   const { template } = await request.json();
@@ -57,17 +71,10 @@ export async function POST(
     return Response.json({ error: "Invalid template" }, { status: 400 });
   }
 
-  const result = await resend.emails.send({
-    from: "Grease & Threads <noreply@greasethreads.com>",
-    to: job.customerEmail,
-    subject: emailData.subject,
-    html: emailData.html,
-    text: emailData.text,
-  });
-
-  if (result.error) {
-    return Response.json({ success: false, reason: result.error.message });
+  const { ok, reason } = sendViaGog(job.customerEmail, emailData.subject, emailData.html);
+  if (!ok) {
+    return Response.json({ success: false, reason });
   }
 
-  return Response.json({ success: true, emailId: result.data?.id });
+  return Response.json({ success: true });
 }

@@ -1,7 +1,7 @@
 /**
  * POST /api/admin/jobs/[id]/send-invoice
  *
- * Generates and emails an invoice or receipt for the given job via Resend.
+ * Generates and emails an invoice or receipt for the given job via gog gmail.
  * Body: { email: string, type: "invoice" | "receipt" }
  *
  * On success, updates the job record with invoice_sent_at and invoice_sent_to.
@@ -10,8 +10,11 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { dbGetJob, dbGetJobItems, dbMarkInvoiceSent } from "@/lib/db";
-import { resend } from "@/lib/email";
 import type { JobItem } from "@/lib/types";
+import { spawnSync } from "child_process";
+
+const GOG_BIN = "/home/coffman34/.npm-global/bin/gog";
+const GOG_ACCOUNT = "jcoffman@greasethreads.com";
 
 // ── HTML email generator ──────────────────────────────────────────────────────
 
@@ -218,51 +221,6 @@ function buildInvoiceHtml(params: {
 </html>`;
 }
 
-function buildInvoiceText(params: {
-  type: "invoice" | "receipt";
-  jobNumber: string;
-  customerName: string;
-  serviceType: string;
-  serviceDate: string;
-  problemDescription: string;
-  items: JobItem[];
-  subtotal: number;
-  total: number;
-}): string {
-  const { type, jobNumber, customerName, serviceType, serviceDate, problemDescription, items, subtotal, total } = params;
-  const isReceipt = type === "receipt";
-  const lines: string[] = [];
-
-  lines.push(`Grease & Threads — HVAC Service & Appliance Repair`);
-  lines.push(`Carlisle, Indiana | 812-564-3719`);
-  lines.push(``);
-  lines.push(isReceipt ? `RECEIPT #${jobNumber} — PAYMENT RECEIVED` : `INVOICE #${jobNumber}`);
-  lines.push(`Date: ${serviceDate}`);
-  lines.push(`Customer: ${customerName}`);
-  lines.push(`Service: ${serviceType}`);
-  if (problemDescription) lines.push(`Work Performed: ${problemDescription}`);
-  lines.push(``);
-
-  if (items.length) {
-    lines.push(`LINE ITEMS`);
-    lines.push(`─`.repeat(40));
-    for (const i of items) {
-      lines.push(`${i.description} | Qty: ${i.quantity} | ${fmt(i.unitPrice)} ea | ${fmt(i.quantity * i.unitPrice)}`);
-    }
-    lines.push(`─`.repeat(40));
-  }
-
-  lines.push(`Subtotal: ${fmt(subtotal)}`);
-  lines.push(`Tax: $0.00`);
-  lines.push(`Total: ${fmt(total)}`);
-  if (isReceipt) lines.push(`✓ Payment Received`);
-  lines.push(``);
-  lines.push(`Thanks for choosing Grease & Threads — we appreciate your business.`);
-  lines.push(`Questions? Call 812-564-3719.`);
-
-  return lines.join("\n");
-}
-
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(
@@ -333,48 +291,34 @@ export async function POST(
     total,
   });
 
-  const textBody = buildInvoiceText({
-    type,
-    jobNumber,
-    customerName: job.customerName,
-    serviceType: job.serviceType,
-    serviceDate,
-    problemDescription: job.problemDescription || "",
-    items,
-    subtotal,
-    total,
-  });
-
   const subject =
     type === "receipt"
       ? `Receipt #${jobNumber} from Grease & Threads`
       : `Invoice #${jobNumber} from Grease & Threads`;
 
-  // Check Resend availability
-  if (!resend) {
-    return Response.json(
-      {
-        success: false,
-        reason: "RESEND_API_KEY not configured — email not sent",
-        preview: { subject, to: email, jobNumber, type, itemCount: items.length, total },
-      },
-      { status: 503 }
-    );
-  }
-
-  // Send via Resend
-  const result = await resend.emails.send({
-    from: "Grease & Threads <invoices@greasethreads.com>",
-    to: email,
-    subject,
-    html: htmlBody,
-    text: textBody,
-  });
+  // Send via gog gmail
+  const result = spawnSync(
+    GOG_BIN,
+    ["-a", GOG_ACCOUNT, "gmail", "send", "--to", email, "--subject", subject, "--body", htmlBody, "--html"],
+    {
+      encoding: "utf8",
+      env: { ...process.env, GOG_KEYRING_PASSWORD: "" },
+      maxBuffer: 10 * 1024 * 1024,
+    }
+  );
 
   if (result.error) {
     return Response.json(
       { success: false, reason: result.error.message },
-      { status: 502 }
+      { status: 500 }
+    );
+  }
+
+  if (result.status !== 0) {
+    const stderr = result.stderr?.trim() || "gog exited with non-zero status";
+    return Response.json(
+      { success: false, reason: stderr },
+      { status: 500 }
     );
   }
 
@@ -383,7 +327,6 @@ export async function POST(
 
   return Response.json({
     success: true,
-    emailId: result.data?.id,
     type,
     sentTo: email,
     jobNumber,
