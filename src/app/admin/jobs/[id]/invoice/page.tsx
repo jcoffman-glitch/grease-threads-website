@@ -59,6 +59,7 @@ export default function InvoicePrintPage() {
       {/* Print button — hidden when printing */}
       <div className="print:hidden fixed top-4 right-4 flex gap-2 z-10">
         <button
+          data-testid="print-btn"
           onClick={() => window.print()}
           className="bg-navy text-white font-bold px-5 py-3 rounded-xl text-sm shadow-lg active:scale-95"
         >
@@ -77,12 +78,15 @@ export default function InvoicePrintPage() {
         <div className="max-w-[680px] mx-auto p-8 print:p-6 print:max-w-none">
 
           {/* Document Type Banner */}
-          <div className={`text-center mb-6 py-2 rounded-lg text-sm font-black uppercase tracking-widest print:rounded-none ${
-            isReceipt
-              ? "bg-green-100 text-green-700 border border-green-200"
-              : "bg-blue-50 text-blue-700 border border-blue-200"
-          }`}>
-            {isReceipt ? "✅ RECEIPT — Payment Received" : "📄 INVOICE"}
+          <div
+            data-testid="document-type-banner"
+            className={`text-center mb-6 py-2 rounded-lg text-sm font-black uppercase tracking-widest print:rounded-none ${
+              isReceipt
+                ? "bg-green-100 text-green-700 border border-green-200"
+                : "bg-blue-50 text-blue-700 border border-blue-200"
+            }`}
+          >
+            {isReceipt ? "RECEIPT — Payment Received" : "INVOICE"}
           </div>
 
           {/* Header */}

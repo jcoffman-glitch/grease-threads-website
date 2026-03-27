@@ -278,6 +278,17 @@ export default function WorkOrderPage() {
 
   return (
     <div className="max-w-2xl mx-auto pb-28">
+      {/* Send Invoice Dialog */}
+      {sendInvoiceOpen && (
+        <SendInvoiceDialog
+          jobId={id}
+          jobNumber={job.jobNumber}
+          customerEmail={job.customerEmail}
+          onClose={() => setSendInvoiceOpen(false)}
+          onSent={handleInvoiceSent}
+        />
+      )}
+
       {/* 1. Top bar (sticky) */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-100 -mx-4 px-4 py-2 flex items-center gap-3 mb-3">
         <Link href="/admin/jobs" className="text-blue-600 text-lg p-2 -ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
@@ -809,7 +820,7 @@ export default function WorkOrderPage() {
             <div className="flex justify-between"><span className="text-gray-500">Invoice #</span><span className="font-bold">{invoice.invoiceNumber}</span></div>
             <div className="flex justify-between mt-1"><span className="text-gray-500">Total</span><span className="font-black text-lg text-navy">${invoice.total.toFixed(2)}</span></div>
           </div>
-          <div className="flex gap-2 mt-3">
+          <div className="flex gap-2 mt-3 flex-wrap">
             <Link href={`/invoice/${invoice.id}`} target="_blank"
               className="flex-1 bg-navy text-white font-bold py-3 rounded-xl text-center text-sm min-h-[44px] flex items-center justify-center">
               View Invoice
@@ -818,7 +829,64 @@ export default function WorkOrderPage() {
               className="flex-1 bg-gray-100 text-navy font-bold py-3 rounded-xl text-center text-sm min-h-[44px] flex items-center justify-center">
               PDF
             </a>
+            <Link
+              href={`/admin/jobs/${id}/invoice`}
+              target="_blank"
+              className="flex-1 bg-gray-100 text-navy font-bold py-3 rounded-xl text-center text-sm min-h-[44px] flex items-center justify-center"
+            >
+              🖨️ Print
+            </Link>
+            <button
+              onClick={() => setSendInvoiceOpen(true)}
+              className="flex-1 bg-green-600 text-white font-bold py-3 rounded-xl text-sm min-h-[44px] flex items-center justify-center gap-1"
+            >
+              📧 Send
+            </button>
           </div>
+        </div>
+      )}
+
+      {/* Invoice / Receipt Send Status + Send Button */}
+      {showInvoiceBtn && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold text-navy text-sm uppercase tracking-wide">Invoice</h2>
+            <div className="flex gap-2">
+              <Link
+                href={`/admin/jobs/${id}/invoice`}
+                target="_blank"
+                className="bg-gray-100 text-navy font-semibold py-2 px-3 rounded-lg text-sm min-h-[44px] flex items-center gap-1"
+              >
+                🖨️ Print
+              </Link>
+              <button
+                data-testid="send-invoice-btn"
+                onClick={() => setSendInvoiceOpen(true)}
+                className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg text-sm min-h-[44px] flex items-center gap-1.5"
+              >
+                📧 Send Invoice
+              </button>
+            </div>
+          </div>
+          {(job.invoiceSentAt || job.receiptSentAt) && (
+            <div className="space-y-1 mt-2 pt-2 border-t border-gray-100">
+              {job.invoiceSentAt && (
+                <p className="text-green-700 text-sm flex items-center gap-2">
+                  <span>📧</span>
+                  <span>Invoice sent — {new Date(job.invoiceSentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                </p>
+              )}
+              {job.receiptSentAt && (
+                <p className="text-green-700 text-sm flex items-center gap-2">
+                  <span>✅</span>
+                  <span>Receipt sent — {new Date(job.receiptSentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                </p>
+              )}
+            </div>
+          )}
+          {!job.invoiceSentAt && !job.receiptSentAt && (
+            <p className="text-gray-400 text-xs">Ready to send — tap Send Invoice to email to the customer.</p>
+          )}
         </div>
       )}
 
@@ -863,6 +931,14 @@ export default function WorkOrderPage() {
               </button>
               <HelpTip text="Creates an invoice from the parts and labor you've entered. Review the total before sending." position="top" />
             </div>
+          )}
+          {showInvoiceBtn && (
+            <button
+              onClick={() => setSendInvoiceOpen(true)}
+              className="bg-green-600 text-white font-black py-3 px-4 rounded-xl text-sm active:scale-95 min-h-[44px] flex items-center gap-1.5"
+            >
+              📧 Send
+            </button>
           )}
           {displayStatus === "Review" && (
             <button

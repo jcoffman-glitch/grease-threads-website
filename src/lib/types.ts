@@ -62,7 +62,8 @@ export interface Job {
   googleCalendarEventId?: string;
   googleCalendarSyncedAt?: string;
   // Invoice delivery tracking
-  invoiceSentAt?: string;   // ISO timestamp when invoice/receipt was last emailed
+  invoiceSentAt?: string;   // ISO timestamp when invoice was last emailed
+  receiptSentAt?: string;   // ISO timestamp when receipt was last emailed
   invoiceSentTo?: string;   // Email address the invoice/receipt was sent to
   // Legacy fields for backward compatibility
   date?: string;
